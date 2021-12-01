@@ -25,12 +25,6 @@ __u32 flags = XDP_FLAGS_DRV_MODE | XDP_FLAGS_UPDATE_IF_NOEXIST;
 struct xsk_umem_info *umem[MAX_CPUS];
 struct xsk_socket_info *xsk_socket[MAX_CPUS];
 
-static inline __u32 xsk_ring_prod__free(struct xsk_ring_prod *r)
-{
-    r->cached_cons = *r->consumer + r->size;
-    return r->cached_cons - r->cached_prod;
-}
-
 static void xsk_free_umem_frame(struct xsk_socket_info *xsk, __u64 frame)
 {
     assert(xsk->umem_frame_free < NUM_FRAMES);
@@ -103,11 +97,6 @@ static __u64 xsk_alloc_umem_frame(struct xsk_socket_info *xsk)
     xsk->umem_frame_addr[xsk->umem_frame_free] = INVALID_UMEM_FRAME;
 
     return frame;
-}
-
-static __u64 xsk_umem_free_frames(struct xsk_socket_info *xsk)
-{
-    return xsk->umem_frame_free;
 }
 
 static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, int queue_id, int ifidx, const char *dev)
