@@ -177,10 +177,12 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
 **/
 int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 {
-    struct ethhdr *eth = pckt;
+    __u64 addr = (__u64)pckt;
+
+    struct ethhdr *eth = addr;
 
     printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", eth->h_source[0], eth->h_source[1], eth->h_source[2], eth->h_source[3], eth->h_source[4], eth->h_source[5], eth->h_dest[0], eth->h_dest[1], eth->h_dest[2], eth->h_dest[3], eth->h_dest[4], eth->h_dest[5]);
-    
+
     __u32 tx_idx = 0;
 
     int ret = xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, 1, &tx_idx);
