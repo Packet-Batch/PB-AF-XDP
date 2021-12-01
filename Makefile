@@ -44,6 +44,7 @@ MAIN_FLAGS := -pthread -lyaml -lelf -lz
 
 # Chains.
 all: mk_build common libbpf af_xdp sequence main
+nocommon: mk_build libbpf af_xdp sequence main
 
 # Creates the build directory if it doesn't already exist.
 mk_build:
