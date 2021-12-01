@@ -25,52 +25,6 @@ __u32 flags = XDP_FLAGS_DRV_MODE | XDP_FLAGS_UPDATE_IF_NOEXIST;
 struct xsk_umem_info *umem[MAX_CPUS];
 struct xsk_socket_info *xsk_socket[MAX_CPUS];
 
-/**
- * Retrieves maximum CPU count (useful for RX queue calculation).
- * 
- * @return Number of CPUs.
-**/
-unsigned int bpf_num_possible_cpus()
-{
-    static const char *fcpu = "/sys/devices/system/cpu/possible";
-    unsigned int start, end, possible_cpus = 0;
-    char buff[128];
-    FILE *fp;
-    int n;
-
-    fp = fopen(fcpu, "r");
-
-    if (!fp) 
-    {
-        printf("Failed to open %s: '%s'!\n", fcpu, strerror(errno));
-        exit(1);
-    }
-
-    while (fgets(buff, sizeof(buff), fp)) 
-    {
-        n = sscanf(buff, "%u-%u", &start, &end);
-
-        if (n == 0) 
-        {
-            printf("Failed to retrieve # possible CPUs!\n");
-
-            return 0;
-        } 
-        else if (n == 1) 
-        {
-            end = start;
-        }
-
-        possible_cpus = start == 0 ? end + 1 : 0;
-
-        break;
-    }
-
-    fclose(fp);
-
-    return possible_cpus;
-}
-
 static inline __u32 xsk_ring_prod__free(struct xsk_ring_prod *r)
 {
     r->cached_cons = *r->consumer + r->size;
