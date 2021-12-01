@@ -4,3 +4,6 @@
 [submodule "modules/tests"]
 	path = modules/tests
 	url = https://github.com/Packet-Batch/PB-Tests.git
+[submodule "modules/libbpf"]
+	path = modules/libbpf
+	url = https://github.com/libbpf/libbpf.git
