@@ -379,7 +379,16 @@ int setup_socket(const char *dev, __u16 thread_id)
     }
 
     // Configure and create the AF_XDP/XSK socket.
-    xsk_socket[thread_id] = xsk_configure_socket(umem[(shared_umem) ? 0 : thread_id], (static_queue_id) ? queue_id : thread_id, (const char *)dev);
+    struct xsk_umem_info *xsk_to_use = umem[(shared_umem) ? 0 : thread_id];
+
+    if (xsk_to_use == NULL)
+    {
+        fprintf(stderr, "Somehow UMEM to use is NULL.\n");
+
+        return -1;
+    }
+
+    xsk_socket[thread_id] = xsk_configure_socket(xsk_to_use, (static_queue_id) ? queue_id : thread_id, (const char *)dev);
 
     // Check to make sure it's valid.
     if (xsk_socket[thread_id] == NULL) 
