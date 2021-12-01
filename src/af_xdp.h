@@ -41,6 +41,6 @@ struct xsk_socket_info
 };
 
 
-int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose);
+int send_packet(int thread_id, void *pckt, __u32 length, __u8 verbose);
 int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id);
 void cleanup_socket(__u16 id);
