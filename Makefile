@@ -35,6 +35,12 @@ AF_XDP_OUT := af_xdp.o
 SEQ_SRC := sequence.c
 SEQ_OUT := sequence.o
 
+CMD_LINE_SRC := cmd_line.c
+CMD_LINE_OUT := cmd_line.o
+
+# Main object files.
+MAIN_OBJS := $(BUILD_DIR)/$(AF_XDP_OUT) $(BUILD_DIR)/$(SEQ_OUT) $(BUILD_DIR)/$(CMD_LINE_OUT)
+
 MAIN_SRC := main.c
 MAIN_OUT := pcktbatch
 
@@ -43,8 +49,8 @@ GLOBAL_FLAGS := -O2
 MAIN_FLAGS := -pthread -lyaml -lelf -lz
 
 # Chains.
-all: mk_build common libbpf af_xdp sequence main
-nocommon: mk_build libbpf af_xdp sequence main
+all: mk_build common libbpf af_xdp sequence cmd_line main
+nocommon: mk_build libbpf af_xdp sequence cmd_line main
 
 # Creates the build directory if it doesn't already exist.
 mk_build:
@@ -67,9 +73,13 @@ af_xdp: mk_build
 sequence: mk_build libbpf
 	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) -c -o $(BUILD_DIR)/$(SEQ_OUT) $(SRC_DIR)/$(SEQ_SRC)
 
+# The command line file.
+cmd_line: mk_build
+	$(CC) $(GLOBAL_FLAGS) -c -o $(BUILD_DIR)/$(CMD_LINE_OUT) $(SRC_DIR)/$(CMD_LINE_SRC)
+
 # The main program.
 main: mk_build $(COMMON_OBJS)
-	$(CC) -I $(COMMON_SRC_DIR) $(GLOBAL_FLAGS) $(MAIN_FLAGS) -o $(BUILD_DIR)/$(MAIN_OUT) $(COMMON_OBJS) $(BUILD_DIR)/$(SEQ_OUT) $(LIBBPF_OBJS) $(BUILD_DIR)/$(AF_XDP_OUT) $(SRC_DIR)/$(MAIN_SRC)
+	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) $(MAIN_FLAGS) -o $(BUILD_DIR)/$(MAIN_OUT) $(COMMON_OBJS) $(LIBBPF_OBJS) $(MAIN_OBJS) $(SRC_DIR)/$(MAIN_SRC)
 
 # Cleanup (remove build files).
 clean:
