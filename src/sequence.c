@@ -656,7 +656,7 @@ void *thread_hdl(void *temp)
         __u16 pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
         int ret;
 
-        if ((ret = send_packet(ti->id, &buffer, pckt_len, ti->cmd.verbose)) != 0)
+        if ((ret = send_packet(ti->id, buffer, pckt_len, ti->cmd.verbose)) != 0)
         {
             fprintf(stderr, "ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", ti->id, strerror(errno));
         }
