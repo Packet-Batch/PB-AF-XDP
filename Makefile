@@ -64,7 +64,7 @@ af_xdp: mk_build
 
 # The sequence file.
 sequence: mk_build libbpf
-	$(CC) -I $(COMMON_SRC_DIR) $(GLOBAL_FLAGS) -c -o $(BUILD_DIR)/$(SEQ_OUT) $(SRC_DIR)/$(SEQ_SRC)
+	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) -c -o $(BUILD_DIR)/$(SEQ_OUT) $(SRC_DIR)/$(SEQ_SRC)
 
 # The main program.
 main: mk_build common $(COMMON_OBJS)
