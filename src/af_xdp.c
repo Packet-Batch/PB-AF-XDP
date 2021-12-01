@@ -156,7 +156,7 @@ static __u64 xsk_umem_free_frames(struct xsk_socket_info *xsk)
     return xsk->umem_frame_free;
 }
 
-static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, int rxqueue, int ifidx, const char *dev)
+static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, int ifidx, const char *dev)
 {
     struct xsk_socket_config xsk_cfg;
     struct xsk_socket_info *xsk_info;
@@ -180,7 +180,7 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     xsk_cfg.xdp_flags = flags;
     xsk_cfg.bind_flags = 0;
 
-    ret = xsk_socket__create(&xsk_info->xsk, dev, rxqueue, umem->umem, NULL, &xsk_info->tx, &xsk_cfg);
+    ret = xsk_socket__create(&xsk_info->xsk, dev, 0, umem->umem, NULL, &xsk_info->tx, &xsk_cfg);
 
     if (ret)
     {
@@ -311,7 +311,7 @@ int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id)
     }
 
     // Open and configure the AF_XDP (xsk) socket.
-    xsk_socket[thread_id] = xsk_configure_socket(umem[thread_id], thread_id, ifidx, (const char *)dev);
+    xsk_socket[thread_id] = xsk_configure_socket(umem[thread_id], ifidx, (const char *)dev);
 
     if (xsk_socket[thread_id] == NULL) 
     {
