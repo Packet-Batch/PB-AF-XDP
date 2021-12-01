@@ -142,8 +142,6 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
         goto error_exit;
     }
 
-    printf("socket_create return code => %d.\n", ret);
-
     // Initialize umem frame allocation.
     for (i = 0; i < NUM_FRAMES; i++)
     {
