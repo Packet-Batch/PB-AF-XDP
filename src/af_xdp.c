@@ -175,13 +175,12 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     }
 
     xsk_info->umem = umem;
-    xsk_cfg.rx_size = XSK_RING_CONS__DEFAULT_NUM_DESCS;
     xsk_cfg.tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
     xsk_cfg.libbpf_flags = XSK_LIBBPF_FLAGS__INHIBIT_PROG_LOAD;
     xsk_cfg.xdp_flags = flags;
     xsk_cfg.bind_flags = 0;
 
-    ret = xsk_socket__create(&xsk_info->xsk, dev, rxqueue, umem->umem, &xsk_info->rx, &xsk_info->tx, &xsk_cfg);
+    ret = xsk_socket__create(&xsk_info->xsk, dev, rxqueue, umem->umem, NULL, &xsk_info->tx, &xsk_cfg);
 
     if (ret)
     {
