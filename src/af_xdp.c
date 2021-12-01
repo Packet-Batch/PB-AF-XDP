@@ -312,7 +312,7 @@ void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp, int verbose)
         }
 
         shared_umem = 1;
-        bind_flags |= XDP_SHARED_UMEM;
+        //bind_flags |= XDP_SHARED_UMEM;
     }
 
     // Check for SKB mode.
