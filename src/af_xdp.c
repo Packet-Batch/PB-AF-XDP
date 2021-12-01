@@ -43,6 +43,7 @@ static void complete_tx(struct xsk_socket_info *xsk)
         return;
     }
 
+    printf("sendto() executed.\n");
     sendto(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, 0);
 
     /* Collect/free completed TX buffers */
@@ -50,6 +51,8 @@ static void complete_tx(struct xsk_socket_info *xsk)
 
     if (completed > 0) 
     {
+        printf("completed > 0.\n");
+
         for (int i = 0; i < completed; i++)
         {
             xsk_free_umem_frame(xsk, *xsk_ring_cons__comp_addr(&xsk->umem->cq, idx_cq++));
@@ -57,6 +60,7 @@ static void complete_tx(struct xsk_socket_info *xsk)
 
         xsk_ring_cons__release(&xsk->umem->cq, completed);
         xsk->outstanding_tx -= completed < xsk->outstanding_tx ? completed : xsk->outstanding_tx;
+        printf("New outstanding TX => %u.\n", xsk->outstanding_tx);
     }
 }
 
@@ -118,7 +122,7 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     }
 
     xsk_info->umem = umem;
-    xsk_cfg.tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;\
+    xsk_cfg.tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
     xsk_cfg.libbpf_flags = 0;
     xsk_cfg.xdp_flags = flags;
     xsk_cfg.bind_flags = 0;
@@ -203,7 +207,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 
     if (verbose)
     {
-        printf("AF_XDP Info :: Address => %llu. Length => %u. Outstanding TX => %u.\n", (__u64)pckt, length, xsk_socket[thread_id]->outstanding_tx);
+        printf("AF_XDP Info :: Address => %llu. Length => %u. Outstanding TX => %u. TX Index => %u.\n", (__u64)pckt, length, xsk_socket[thread_id]->outstanding_tx, tx_idx);
     }
 
     complete_tx(xsk_socket[thread_id]);
