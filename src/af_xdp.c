@@ -194,11 +194,6 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     xsk_ring_prod__submit(&xsk_socket[thread_id]->tx, 1);
     xsk_socket[thread_id]->outstanding_tx++;
 
-    if (verbose)
-    {
-        printf("AF_XDP Info :: Address => %llu. Length => %u. Outstanding TX => %u.\n", (__u64)pckt, length, xsk_socket[thread_id]->outstanding_tx);
-    }
-
     complete_tx(xsk_socket[thread_id]);
 
     return 0;
