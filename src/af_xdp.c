@@ -174,7 +174,7 @@ int send_packet(int thread_id, void *pckt, __u32 length, __u8 verbose)
     struct iphdr *iph = (struct iphdr *)eth + 1;
 
     printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", eth->h_source[0], eth->h_source[1], eth->h_source[2], eth->h_source[3], eth->h_source[4], eth->h_source[5], eth->h_dest[0], eth->h_dest[1], eth->h_dest[2], eth->h_dest[3], eth->h_dest[4], eth->h_dest[5]);
-    printf("%u => %u.\n", ntohl(iph->saddr), ntohl(iph->daddr));
+    printf("%u => %u.\n", iph->saddr, iph->daddr);
 
     __u32 tx_idx = 0;
 
