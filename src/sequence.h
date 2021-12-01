@@ -16,6 +16,8 @@ struct thread_info
     struct sequence seq;
     __u16 seq_cnt;
     struct cmd_line cmd;
+    int id;
+    struct xsk_socket_info *xsk_info;
 };
 
 void seq_send(const char *interface, struct sequence seq, __u16 seqc, struct cmd_line cmd);

@@ -20,12 +20,14 @@
 #include <pthread.h>
 #include <string.h>
 #include <errno.h>
+#include <linux/if_link.h>
 
 #include <utils.h>
 #include <cmd_line.h>
 #include <config.h>
 
 #include "sequence.h"
+#include "af_xdp.h"
 
 #include <csum.h>
 
@@ -154,23 +156,16 @@ void *thread_hdl(void *temp)
     // Initialize socket FD.
     int sock_fd;
 
-    // Attempt to create socket and also check for TCP cooked socket.
-    __u8 sock_domain = AF_PACKET;
-    __u8 sock_type = SOCK_RAW;
-    __u8 sock_proto = IPPROTO_RAW;
+    // Create AF_XDP socket and check.
+    sock_fd = setup_socket(ti->device, XDP_FLAGS_DRV_MODE, ti->id);
 
-    if (protocol == IPPROTO_TCP && ti->seq.tcp.use_socket)
+    if (sock_fd < 0)
     {
-        sock_domain = AF_INET;
-        sock_type = SOCK_STREAM;
-        sock_proto = 0;
-    }
-
-    if ((protocol != IPPROTO_TCP || !ti->seq.tcp.use_socket) && (sock_fd = socket(sock_domain, sock_type, sock_proto)) < 0)
-    {
-        fprintf(stderr, "ERROR - Could not setup socket :: %s.\n", strerror(errno));
+        fprintf(stderr, "Error setting up AF_XDP socket on thread #%d.\n", ti->id);
 
         pthread_exit(NULL);
+
+        return NULL;
     }
 
     // Check if source MAC address is set properly. If not, let's get the MAC address of the interface we're sending packets out of.
@@ -513,7 +508,7 @@ void *thread_hdl(void *temp)
         }
 
         // Check if source IP is defined. If not, get a random IP from the ranges and assign it to the IP header's source IP.
-        if (ti->seq.ip.src_ip == NULL && !ti->seq.tcp.use_socket)
+        if (ti->seq.ip.src_ip == NULL)
         {
             // Check if there are ranges.
             if (ti->seq.ip.range_count > 0)
@@ -620,23 +615,6 @@ void *thread_hdl(void *temp)
                 tcph->check = 0;
                 tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, (tcph->doff * 4) + data_len, IPPROTO_TCP, csum_partial(tcph, (tcph->doff * 4) + data_len, 0));   
             }
-
-            if (ti->seq.tcp.use_socket)
-            {
-                if ((sock_fd = socket(sock_domain, sock_type, sock_proto)) < 0)
-                {
-                    fprintf(stderr, "ERROR - Cannot setup TCP cook socket :: %s.\n", strerror(errno));
-
-                    pthread_exit(NULL);
-                }
-
-                if (connect(sock_fd, (struct sockaddr *)&tcpsin, sizeof(tcpsin)) != 0)
-                {
-                    fprintf(stderr, "ERROR - Cannot connect to destination using cooked sockets :: %s.\n", strerror(errno));
-
-                    pthread_exit(NULL);
-                }
-            }
         }
         else if (protocol == IPPROTO_ICMP)
         {
@@ -659,26 +637,17 @@ void *thread_hdl(void *temp)
             update_iph_checksum(iph);
         }
 
-        __u16 sent;
-
         // Attempt to send packet.
-        if (protocol == IPPROTO_TCP && ti->seq.tcp.use_socket)
+        __u16 pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
+        int ret;
+
+        if ((ret = send_packet(ti->id, &buffer, pckt_len)) != 0)
         {
-            if ((sent = send(sock_fd, data, data_len, 0)) < 0)
-            {
-                fprintf(stderr, "ERROR - Could not send TCP (cooked) packet with length %hu :: %s.\n", (ntohs(iph->tot_len)), strerror(errno));
-            }
-        }
-        else
-        {
-            if ((sent = send(sock_fd, buffer, ntohs(iph->tot_len) + sizeof(struct ethhdr), 0)) < 0)
-            {
-                fprintf(stderr, "ERROR - Could not send packet with length %lu :: %s.\n", (ntohs(iph->tot_len) + sizeof(struct ethhdr)), strerror(errno));
-            }
+            fprintf(stderr, "ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", ti->id, strerror(errno));
         }
 
         // Check if we want to send verbose output or not.
-        if (ti->cmd.verbose && sent > 0)
+        if (ti->cmd.verbose && ret == 0)
         {
             // Retrieve source and destination ports for UDP/TCP protocols.
             __u16 srcport = 0;
@@ -695,7 +664,7 @@ void *thread_hdl(void *temp)
                 dstport = ntohs(tcph->dest);
             }
 
-            fprintf(stdout, "Sent %d bytes of data from %s:%d to %s:%d.\n", sent, (ti->seq.ip.src_ip != NULL) ? ti->seq.ip.src_ip : s_ip, srcport, ti->seq.ip.dst_ip, dstport);
+            fprintf(stdout, "Sent %d bytes of data from %s:%d to %s:%d.\n", pckt_len, (ti->seq.ip.src_ip != NULL) ? ti->seq.ip.src_ip : s_ip, srcport, ti->seq.ip.dst_ip, dstport);
         }
 
         // Check data.
@@ -706,13 +675,7 @@ void *thread_hdl(void *temp)
                 break;
             }
 
-            __sync_add_and_fetch(&total_data[ti->seq_cnt], ntohs(iph->tot_len) + sizeof(struct ethhdr));
-        }
-
-        // Close TCP socket if enabled.
-        if (ti->seq.tcp.use_socket)
-        {
-            close(sock_fd);
+            __sync_add_and_fetch(&total_data[ti->seq_cnt], pckt_len);
         }
 
         // Check for delay.
@@ -722,11 +685,8 @@ void *thread_hdl(void *temp)
         }
     }
 
-    // Close socket.
-    if (!ti->seq.tcp.use_socket)
-    {
-        close(sock_fd);
-    }
+    // Cleanup AF_XDP socket.
+    cleanup_socket(ti->id);
 
     pthread_exit(NULL);
 }
@@ -772,6 +732,8 @@ void seq_send(const char *interface, struct sequence seq, __u16 seq_cnt2, struct
 
     for (int i = 0; i < threads; i++)
     {
+        ti.id = i;
+
         // Create a duplicate of thread info structure to send to each thread.
         struct thread_info *ti_dup = malloc(sizeof(struct thread_info));
         memcpy(ti_dup, &ti, sizeof(struct thread_info));
