@@ -376,14 +376,17 @@ int setup_socket(const char *dev, __u16 thread_id)
 
             return -1;
         }
+
+        fprintf(stdout, "Created UMEM at index %d.\n", thread_id);
     }
 
     // Configure and create the AF_XDP/XSK socket.
-    struct xsk_umem_info *xsk_to_use = umem[(shared_umem) ? 0 : thread_id];
+    int id = (shared_umem) ? 0 : thread_id;
+    struct xsk_umem_info *xsk_to_use = umem[id];
 
     if (xsk_to_use == NULL)
     {
-        fprintf(stderr, "Somehow UMEM to use is NULL.\n");
+        fprintf(stderr, "Somehow UMEM to use is NULL at index %d.\n", id);
 
         return -1;
     }
