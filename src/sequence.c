@@ -36,6 +36,38 @@ __u64 total_data[MAX_SEQUENCES];
 __u16 seq_cnt;
 
 /**
+ * Retrieves the source MAC address of an interface.
+ * 
+ * @param dev The interface/device name.
+ * @param src_mac A pointer to the source MAC address (__u8).
+ * 
+ * @return 0 on success or -1 on failure (path not found).
+**/
+int get_src_mac_address(const char *dev, __u8 *src_mac)
+{
+    char path[255];
+    snprintf(path, sizeof(path) - 1, "/sys/class/net/%s/address", dev);
+
+    FILE *fp = fopen(path, "r");
+
+    if (!fp)
+    {
+        return -1;
+    }
+
+    char buffer[255];
+
+    fgets(buffer, sizeof(buffer), fp);
+
+    sscanf(buffer, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &src_mac[0], &src_mac[1], &src_mac[2], &src_mac[3], &src_mac[4], &src_mac[5]);
+
+    // Close file.
+    fclose(fp);
+
+    return 0;
+}
+
+/**
  * The thread handler for sending/receiving.
  * 
  * @param data Data (struct thread_info) for the sequence.
@@ -144,15 +176,6 @@ void *thread_hdl(void *temp)
         free(pl_str);
     }
 
-    // Create sockaddr_ll struct.
-    struct sockaddr_ll sin;
-
-    // Fill out sockaddr_ll struct.
-    sin.sll_family = PF_PACKET;
-    sin.sll_ifindex = if_nametoindex((ti->seq.interface != NULL) ? ti->seq.interface : ti->device);
-    sin.sll_protocol = htons(ETH_P_IP);
-    sin.sll_halen = ETH_ALEN;
-
     // Initialize socket FD.
     int sock_fd;
 
@@ -169,26 +192,18 @@ void *thread_hdl(void *temp)
     }
 
     // Check if source MAC address is set properly. If not, let's get the MAC address of the interface we're sending packets out of.
-    if (src_mac[0] == 0 && src_mac[1] == 0 && src_mac[2] == 0 && src_mac[3] == 0 && src_mac[4] == 0 && src_mac[5] == 0 && !ti->seq.tcp.use_socket)
+    if (src_mac[0] == 0 && src_mac[1] == 0 && src_mac[2] == 0 && src_mac[3] == 0 && src_mac[4] == 0 && src_mac[5] == 0)
     {
-        // Receive the interface's MAC address (the source MAC).
-        struct ifreq if_req;
-        
-        strcpy(if_req.ifr_name, (ti->seq.interface != NULL) ? ti->seq.interface : ti->device);
-
-        // Attempt to get MAC address.
-        if (ioctl(sock_fd, SIOCGIFHWADDR, &if_req) != 0)
+        if (get_src_mac_address(ti->device, src_mac) != 0)
         {
-            fprintf(stderr, "ERROR - Could not retrieve MAC address of interface :: %s.\n", strerror(errno));
-
-            pthread_exit(NULL);
+            fprintf(stdout, "WARNING - Failed to retrieve MAC address for %s.\n", ti->device);
         }
 
-        // Copy source MAC to necessary variables.
-        memcpy(src_mac, if_req.ifr_addr.sa_data, ETH_ALEN);
+        if (src_mac[0] == 0 && src_mac[1] == 0 && src_mac[2] == 0 && src_mac[3] == 0 && src_mac[4] == 0 && src_mac[5] == 0)
+        {
+            fprintf(stdout, "WARNING - Source MAC address retrieved is 00:00:00:00:00:00.\n");
+        }
     }
-
-    memcpy(sin.sll_addr, src_mac, ETH_ALEN);
 
     // Check if destination MAC is set and if not, get the default gateway's MAC address.
     if (dst_mac[0] == 0 && dst_mac[1] == 0 && dst_mac[2] == 0 && dst_mac[3] == 0 && dst_mac[4] == 0 && dst_mac[5] == 0)
@@ -197,16 +212,6 @@ void *thread_hdl(void *temp)
         get_gw_mac((__u8 *) &dst_mac);
     }
 
-    if (protocol != IPPROTO_TCP || !ti->seq.tcp.use_socket)
-    {
-        // Attempt to bind socket.
-        if (bind(sock_fd, (struct sockaddr *)&sin, sizeof(sin)) != 0)
-        {
-            fprintf(stderr, "ERROR - Cannot bind to socket :: %s.\n", strerror(errno));
-
-            pthread_exit(NULL);
-        }
-    }
     /* Our goal below is to set as many things before the while loop as possible since any additional instructions inside the while loop will impact performance. */
 
     // Some variables to help decide the randomness of our packets.
