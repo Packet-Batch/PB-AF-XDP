@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <linux/types.h>
+#include <getopt.h>
 
 #include <utils.h>
 #include <cmd_line.h>
@@ -16,6 +17,7 @@
 int main(int argc, char *argv[])
 {
     // Create command line structure.
+    opterr = 0;
     struct cmd_line cmd = {0};
 
     // Parse command line and store values into cmd.
