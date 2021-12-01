@@ -212,6 +212,13 @@ void *thread_hdl(void *temp)
         get_gw_mac((__u8 *) &dst_mac);
     }
 
+    if (ti->cmd.verbose)
+    {
+        printf("Source MAC address (%d) => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", ti->id, src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+        printf("Destination MAC address (%d) => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", ti->id, dst_mac[0], dst_mac[1], dst_mac[2], dst_mac[3], dst_mac[4], dst_mac[5]);
+
+    }
+
     /* Our goal below is to set as many things before the while loop as possible since any additional instructions inside the while loop will impact performance. */
 
     // Some variables to help decide the randomness of our packets.
@@ -646,7 +653,7 @@ void *thread_hdl(void *temp)
         __u16 pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
         int ret;
 
-        if ((ret = send_packet(ti->id, &buffer, pckt_len)) != 0)
+        if ((ret = send_packet(ti->id, &buffer, pckt_len, ti->cmd.verbose)) != 0)
         {
             fprintf(stderr, "ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", ti->id, strerror(errno));
         }
