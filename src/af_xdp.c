@@ -254,24 +254,40 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
  * Sets global variables from command line.
  * 
  * @param cmd_af_xdp A pointer to the AF_XDP-specific command line variable.
+ * @param verbose Whether we should print verbose.
  * 
  * @return Void
 **/
-void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp)
+void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp, int verbose)
 {
     // Check for zero-copy or copy modes.
     if (cmd_af_xdp->zero_copy)
     {
+        if (verbose)
+        {
+            fprintf(stdout, "Running AF_XDP sockets in zero-copy mode.\n");
+        }
+
         bind_flags |= XDP_ZEROCOPY;
     }
     else if (cmd_af_xdp->copy)
     {
+        if (verbose)
+        {
+            fprintf(stdout, "Running AF_XDP sockets in copy mode.\n");
+        }
+
         bind_flags |= XDP_COPY;
     }
 
     // Check for no wakeup mode.
     if (cmd_af_xdp->no_wake_up)
     {
+        if (verbose)
+        {
+            fprintf(stdout, "Running AF_XDP sockets in no wake-up mode.\n");
+        }
+
         bind_flags &= ~XDP_USE_NEED_WAKEUP; 
     }
 
@@ -280,11 +296,21 @@ void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp)
     {
         static_queue_id = 1;
         queue_id = cmd_af_xdp->queue;
+
+        if (verbose)
+        {
+            fprintf(stdout, "Running AF_XDP sockets with one queue ID => %d.\n", queue_id);
+        }
     }
 
     // Check for shared UMEM.
     if (cmd_af_xdp->shared_umem)
     {
+        if (verbose)
+        {
+            fprintf(stdout, "Running AF_XDP sockets with shared UMEM mode.\n");
+        }
+
         shared_umem = 1;
         bind_flags |= XDP_SHARED_UMEM;
     }
@@ -292,11 +318,21 @@ void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp)
     // Check for SKB mode.
     if (cmd_af_xdp->skb_mode)
     {
+        if (verbose)
+        {
+            fprintf(stdout, "Running AF_XDP sockets in SKB mode.\n");
+        }
+
         xdp_flags = XDP_FLAGS_SKB_MODE;
     }
 
     // Assign batch size.
     batch_size = cmd_af_xdp->batch_size;
+
+    if (verbose)
+    {
+        fprintf(stdout, "Running AF_XDP sockets with batch size => %d.\n", batch_size);
+    }
 }
 
 /**

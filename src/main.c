@@ -48,8 +48,8 @@ int main(int argc, char *argv[])
     parse_cmd_line_af_xdp(&cmd_af_xdp, argc, argv);
 
     // Set global variables in AF_XDP program.
-    setup_af_xdp_variables(&cmd_af_xdp);
-    
+    setup_af_xdp_variables(&cmd_af_xdp, cmd.verbose);
+
     // Check if config is specified.
     if (cmd.config == NULL)
     {
