@@ -653,7 +653,7 @@ void *thread_hdl(void *temp)
         }
 
         // Attempt to send packet.
-        __u16 pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
+        __u32 pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
         int ret;
 
         if ((ret = send_packet(ti->id, (void *)buffer, pckt_len, ti->cmd.verbose)) != 0)

@@ -162,7 +162,7 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
  * 
  * @return Returns 0 on success and -1 on failure.
 **/
-int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
+int send_packet(int thread_id, void *pckt, __u32 length, __u8 verbose)
 {
     __u64 addr = (__u64)pckt;
 
