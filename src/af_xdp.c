@@ -117,10 +117,10 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     }
 
     xsk_info->umem = umem;
-    xsk_cfg.tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
+    xsk_cfg.tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;\
     xsk_cfg.libbpf_flags = XSK_LIBBPF_FLAGS__INHIBIT_PROG_LOAD;
     xsk_cfg.xdp_flags = flags;
-    xsk_cfg.bind_flags = 0;
+    xsk_cfg.bind_flags = XDP_COPY;
 
     ret = xsk_socket__create(&xsk_info->xsk, dev, queue_id, umem->umem, NULL, &xsk_info->tx, &xsk_cfg);
 
@@ -215,7 +215,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 **/
 int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id)
 {
-    flags = 0;
+    flags = xdp_flags;
     int ret;
     int xsks_map_fd;
     void *packet_buffer;
