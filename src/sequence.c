@@ -185,6 +185,9 @@ void *thread_hdl(void *temp)
     if (sock_fd < 0)
     {
         fprintf(stderr, "Error setting up AF_XDP socket on thread #%d.\n", ti->id);
+        
+        // Attempt to cleanup socket.
+        cleanup_socket(ti->id);
 
         pthread_exit(NULL);
 
