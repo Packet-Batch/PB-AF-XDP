@@ -145,7 +145,7 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     xsk_info->umem_frame_free = NUM_FRAMES;
 
     // Stuff the receive path with buffers, we assume we have enough.
-    ret = xsk_ring_prod__reserve(&xsk_info->umem->cq, XSK_RING_PROD__DEFAULT_NUM_DESCS, &idx);
+    ret = xsk_ring_prod__reserve(&xsk_info->umem->fq, XSK_RING_PROD__DEFAULT_NUM_DESCS, &idx);
 
     if (ret != XSK_RING_PROD__DEFAULT_NUM_DESCS)
     {
@@ -156,10 +156,10 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
 
     for (i = 0; i < XSK_RING_PROD__DEFAULT_NUM_DESCS; i++)
     {
-        *xsk_ring_prod__fill_addr(&xsk_info->umem->cq, idx++) = xsk_alloc_umem_frame(xsk_info);
+        *xsk_ring_prod__fill_addr(&xsk_info->umem->fq, idx++) = xsk_alloc_umem_frame(xsk_info);
     }
 
-    xsk_ring_prod__submit(&xsk_info->umem->cq, XSK_RING_PROD__DEFAULT_NUM_DESCS);
+    xsk_ring_prod__submit(&xsk_info->umem->fq, XSK_RING_PROD__DEFAULT_NUM_DESCS);
 
     return xsk_info;
 
