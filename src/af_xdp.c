@@ -229,10 +229,11 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
  * @param thread_id The thread ID to use to lookup the AF_XDP socket.
  * @param pckt The packet buffer starting at the Ethernet header.
  * @param length The packet buffer's length.
+ * @param verbose Whether verbose is enabled or not.
  * 
  * @return Returns 0 on success and -1 on failure.
 **/
-int send_packet(int thread_id, void *pckt, __u16 length)
+int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 {
     __u32 tx_idx = 0;
 
@@ -251,6 +252,11 @@ int send_packet(int thread_id, void *pckt, __u16 length)
     xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->len = length;
     xsk_ring_prod__submit(&xsk_socket[thread_id]->tx, 1);
     xsk_socket[thread_id]->outstanding_tx++;
+
+    if (verbose)
+    {
+        printf("AF_XDP Info :: Address => %llu. Length => %u. Outstanding TX => %u.\n", (__u64)pckt, length, xsk_socket[thread_id]->outstanding_tx);
+    }
 
     complete_tx(xsk_socket[thread_id]);
 
