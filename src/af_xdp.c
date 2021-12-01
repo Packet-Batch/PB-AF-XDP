@@ -215,7 +215,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 **/
 int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id)
 {
-    flags = xdp_flags;
+    flags = 0;
     int ret;
     int xsks_map_fd;
     void *packet_buffer;
