@@ -46,8 +46,12 @@ static void complete_tx(struct xsk_socket_info *xsk)
         return;
     }
 
-    printf("sendto() executed.\n");
-    sendto(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, 0);
+    if (xsk_ring_prod__needs_wakeup(&xsk->tx))
+    {
+        int fd = xsk_socket__fd(xsk->xsk);
+        printf("sendto() executed with FD %d.\n", fd);
+        sendto(fd, NULL, 0, MSG_DONTWAIT, NULL, 0);
+    }
 
     /* Collect/free completed TX buffers */
     completed = xsk_ring_cons__peek(&xsk->umem->cq, XSK_RING_CONS__DEFAULT_NUM_DESCS, &idx_cq);
@@ -128,7 +132,7 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     xsk_cfg.tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
     xsk_cfg.libbpf_flags = XSK_LIBBPF_FLAGS__INHIBIT_PROG_LOAD;
     xsk_cfg.xdp_flags = flags;
-    xsk_cfg.bind_flags = 0;
+    xsk_cfg.bind_flags = XDP_USE_NEED_WAKEUP;
 
     ret = xsk_socket__create(&xsk_info->xsk, dev, queue_id, umem->umem, NULL, &xsk_info->tx, &xsk_cfg);
 
