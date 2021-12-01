@@ -193,7 +193,12 @@ int send_packet(int thread_id, void *pckt, __u32 length, __u8 verbose)
         return -1;
     }
 
-    xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->addr = (__u64)pckt;
+    // Insert packet into umem.
+    __u64 addrat = xsk_socket[thread_id]->outstanding_tx * FRAME_SIZE;
+
+    memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem, addrat), pckt, length);
+
+    xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->addr = addrat;
     xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->len = length;
     xsk_ring_prod__submit(&xsk_socket[thread_id]->tx, 1);
     xsk_socket[thread_id]->outstanding_tx++;
