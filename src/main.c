@@ -47,6 +47,7 @@ int main(int argc, char *argv[])
     cmd_af_xdp.batch_size = 1;
 
     // Parse AF_XDP-specific command line.
+    optind = 0;
     parse_cmd_line_af_xdp(&cmd_af_xdp, argc, argv);
 
     // Set global variables in AF_XDP program.

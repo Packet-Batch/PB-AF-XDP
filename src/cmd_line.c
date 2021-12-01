@@ -68,11 +68,6 @@ void parse_cmd_line_af_xdp(struct cmd_line_af_xdp *cmd_af_xdp, int argc, char **
                 cmd_af_xdp->copy = 1;
 
                 break;
-
-            case '?':
-                fprintf(stderr, "Missing argument.\n");
-
-                break;
         }
     }
 }
