@@ -60,13 +60,8 @@ static void complete_tx(struct xsk_socket_info *xsk)
     {
         printf("completed > 0.\n");
 
-        for (int i = 0; i < completed; i++)
-        {
-            xsk_free_umem_frame(xsk, *xsk_ring_cons__comp_addr(&xsk->umem->cq, idx_cq++));
-        }
-
         xsk_ring_cons__release(&xsk->umem->cq, completed);
-        xsk->outstanding_tx -= completed < xsk->outstanding_tx ? completed : xsk->outstanding_tx;
+        xsk->outstanding_tx -= completed;
         printf("New outstanding TX => %u.\n", xsk->outstanding_tx);
     }
 }
@@ -196,7 +191,7 @@ int send_packet(int thread_id, void *pckt, __u32 length, __u8 verbose)
     // Insert packet into umem.
     __u64 addrat = xsk_socket[thread_id]->outstanding_tx * FRAME_SIZE;
 
-    memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem, addrat), pckt, length);
+    memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addrat), pckt, length);
 
     xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->addr = addrat;
     xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->len = length;
