@@ -125,7 +125,7 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     xsk_cfg.tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
     xsk_cfg.libbpf_flags = XSK_LIBBPF_FLAGS__INHIBIT_PROG_LOAD;
     xsk_cfg.xdp_flags = 0;
-    xsk_cfg.bind_flags = XDP_USE_NEED_WAKEUP;
+    xsk_cfg.bind_flags = 0;
 
     ret = xsk_socket__create(&xsk_info->xsk, dev, queue_id, umem->umem, NULL, &xsk_info->tx, &xsk_cfg);
 
