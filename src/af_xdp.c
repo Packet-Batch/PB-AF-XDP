@@ -1,18 +1,13 @@
-#include <assert.h>
-#include <errno.h>
-#include <getopt.h>
-#include <locale.h>
-#include <pthread.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
+#include <errno.h>
+#include <locale.h>
+#include <linux/types.h>
 
 #include <net/if.h>
 
-#include <linux/types.h>
 #include <sys/socket.h>
 #include <linux/if_link.h>
 #include <bpf.h>
@@ -20,23 +15,49 @@
 
 #include "af_xdp.h"
 
-__u32 flags = XDP_FLAGS_DRV_MODE | XDP_FLAGS_UPDATE_IF_NOEXIST;
+/* Global variables */
+// The XDP flags to load the program with.
+__u32 flags = XDP_FLAGS_DRV_MODE;
 
+// Pointers to the umem and XSK sockets for each thread.
 struct xsk_umem_info *umem[MAX_CPUS];
 struct xsk_socket_info *xsk_socket[MAX_CPUS];
 
+/**
+ * Assigns an address to a free UMEM frame.
+ * 
+ * @param xsk A pointer to the xsk_socket_info structure.
+ * @param frame The address to assign to the UMEM frame.
+ * 
+ * @return Void
+**/
 static void xsk_free_umem_frame(struct xsk_socket_info *xsk, __u64 frame)
 {
-    assert(xsk->umem_frame_free < NUM_FRAMES);
+    if (xsk->umem_frame_free < NUM_FRAMES)
+    {
+        fprintf(stderr, "WARNING - UMEM free frame count is lower than the number of frames we specified.\n");
 
+        return;
+    }
+
+    // Assign the frame address to the free UMEM frame.
     xsk->umem_frame_addr[xsk->umem_frame_free++] = frame;
 }
 
+/**
+ * Completes the TX call via a syscall and also checks if we need to free the TX buffer.
+ * 
+ * @param xsk A pointer to the xsk_socket_info structure.
+ * 
+ * @return Void
+**/
 static void complete_tx(struct xsk_socket_info *xsk)
 {
+    // Initiate starting variables (completed amount and completion ring index).
     unsigned int completed;
     uint32_t idx_cq;
 
+    // If outstanding is below 1, it means we have no packets to TX.
     if (!xsk->outstanding_tx)
     {
         return;
@@ -48,26 +69,33 @@ static void complete_tx(struct xsk_socket_info *xsk)
         sendto(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, 0);
     }
 
-    /* Collect/free completed TX buffers */
+    // If the TX buffer is filled, we need to free all frames and decrease the amount of outstanding TX packets.
     completed = xsk_ring_cons__peek(&xsk->umem->cq, XSK_RING_CONS__DEFAULT_NUM_DESCS, &idx_cq);
 
     if (completed > 0) 
     {
-        for (int i = 0; i < completed; i++)
-        {
-            xsk_free_umem_frame(xsk, *xsk_ring_cons__comp_addr(&xsk->umem->cq, idx_cq++));
-        }
-
+        // Release "completed" frames.
         xsk_ring_cons__release(&xsk->umem->cq, completed);
+
         xsk->outstanding_tx -= completed < xsk->outstanding_tx ? completed : xsk->outstanding_tx;
     }
 }
 
+/**
+ * Configures the UMEM area for our AF_XDP/XSK sockets to use for rings.
+ * 
+ * @param buffer The blank buffer we allocated in setup_socket().
+ * @param size The buffer size.
+ * 
+ * @return Returns a pointer to the UMEM area instead of the XSK UMEM information structure (struct xsk_umem_info).
+**/
 static struct xsk_umem_info *configure_xsk_umem(void *buffer, __u64 size)
 {
+    // Create umem pointer and return variable.
     struct xsk_umem_info *umem;
     int ret;
 
+    // Allocate memory space to the umem pointer and check.
     umem = calloc(1, sizeof(*umem));
 
     if (!umem)
@@ -75,6 +103,7 @@ static struct xsk_umem_info *configure_xsk_umem(void *buffer, __u64 size)
         return NULL;
     }
 
+    // Attempt to create the umem area and check.
     ret = xsk_umem__create(&umem->umem, buffer, size, &umem->fq, &umem->cq, NULL);
 
     if (ret) 
@@ -83,85 +112,81 @@ static struct xsk_umem_info *configure_xsk_umem(void *buffer, __u64 size)
         return NULL;
     }
 
+    // Assign the buffer we created in setup_socket() to umem buffer.
     umem->buffer = buffer;
 
+    // Return umem pointer.
     return umem;
 }
 
-static __u64 xsk_alloc_umem_frame(struct xsk_socket_info *xsk)
-{
-    __u64 frame;
-
-    if (xsk->umem_frame_free == 0)
-    {
-        return INVALID_UMEM_FRAME;
-    }
-
-    frame = xsk->umem_frame_addr[--xsk->umem_frame_free];
-    xsk->umem_frame_addr[xsk->umem_frame_free] = INVALID_UMEM_FRAME;
-
-    return frame;
-}
-
+/**
+ * Configures an AF_XDP/XSK socket.
+ * 
+ * @param umem A pointer to the umem we created in setup_socket().
+ * @param queue_id The TX queue ID to use.
+ * @param ifidx The index of the interface we're binding to.
+ * @param dev The name of the interface we're binding to.
+ * 
+ * @return Returns a pointer to the AF_XDP/XSK socket inside of a the XSK socket info structure (struct xsk_socket_info).
+**/
 static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, int queue_id, int ifidx, const char *dev)
 {
+    // Initialize starting variables.
     struct xsk_socket_config xsk_cfg;
     struct xsk_socket_info *xsk_info;
     __u32 idx;
     int i;
     int ret;
 
+    // Allocate memory space to our XSK socket.
     xsk_info = calloc(1, sizeof(*xsk_info));
 
+    // If it fails, return.
     if (!xsk_info)
     {
-        fprintf(stderr, "xsk_info = NULL\n");
+        fprintf(stderr, "Failed to allocate memory space to AF_XDP/XSK socket.\n");
 
         return NULL;
     }
 
+    // Assign AF_XDP/XSK's socket umem area to the umem we allocated before.
     xsk_info->umem = umem;
+    
+    // Set the TX size (we don't need anything RX-related).
     xsk_cfg.tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
+
+    // Make sure we don't load an XDP program via LibBPF.
     xsk_cfg.libbpf_flags = XSK_LIBBPF_FLAGS__INHIBIT_PROG_LOAD;
+
+    // Assign our XDP flags.
     xsk_cfg.xdp_flags = flags;
+
+    // Assign bind flags.
     xsk_cfg.bind_flags = XDP_USE_NEED_WAKEUP;
 
+    // Attempt to create the AF_XDP/XSK socket itself at queue ID (we don't allocate a RX queue for obvious reasons).
     ret = xsk_socket__create(&xsk_info->xsk, dev, queue_id, umem->umem, NULL, &xsk_info->tx, &xsk_cfg);
 
     if (ret)
     {
-        //fprintf(stderr, "xdp_socket__create :: Error.\n");
+        fprintf(stderr, "Failed to create AF_XDP/XSK socket at creation.\n");
 
         goto error_exit;
     }
 
-    // Initialize umem frame allocation.
+    // Assign each umem frame to an address we'll use later.
     for (i = 0; i < NUM_FRAMES; i++)
     {
         xsk_info->umem_frame_addr[i] = i * FRAME_SIZE;
     }
 
+    // Assign how many number of frames we can hold.
     xsk_info->umem_frame_free = NUM_FRAMES;
 
-    // Stuff the receive path with buffers, we assume we have enough.
-    ret = xsk_ring_prod__reserve(&xsk_info->umem->fq, XSK_RING_PROD__DEFAULT_NUM_DESCS, &idx);
-
-    if (ret != XSK_RING_PROD__DEFAULT_NUM_DESCS)
-    {
-        fprintf(stderr, "ret != XSK_RING_PROD__DEFAULT_NUM_DESCS :: Error.\n");
-
-        goto error_exit;
-    }
-
-    for (i = 0; i < XSK_RING_PROD__DEFAULT_NUM_DESCS; i++)
-    {
-        *xsk_ring_prod__fill_addr(&xsk_info->umem->fq, idx++) = xsk_alloc_umem_frame(xsk_info);
-    }
-
-    xsk_ring_prod__submit(&xsk_info->umem->fq, XSK_RING_PROD__DEFAULT_NUM_DESCS);
-
+    // Return the AF_XDP/XSK socket information itself as a pointer.
     return xsk_info;
 
+    // Handle error and return NULL.
     error_exit:
     errno = -ret;
 
@@ -180,10 +205,13 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
 **/
 int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 {
+    // This represents the TX index.
     __u32 tx_idx = 0;
 
+    // Retrieve the TX index from the TX ring to fill.
     int ret = xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, 1, &tx_idx);
 
+    // If we don't have 1, there are no TX slots available.
     if (ret != 1)
     {
         #ifdef DEBUG
@@ -193,13 +221,28 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
         return -1;
     }
 
-    xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->addr = (__u64)pckt;
+    // We must retrieve the available address in the umem to copy our packet data to.
+    __u64 addrat = xsk_socket[thread_id]->umem_frame_addr[xsk_socket[thread_id]->outstanding_tx];
+
+    // We must copy our packet data to the umem area at the specific index (idx * frame size). We did this earlier.
+    memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addrat), pckt, length);
+
+    // Point the TX ring's frame address to what we have in the umem.
+    xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->addr = addrat;
+
+    // Tell the TX ring the packet length.
     xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->len = length;
+
+    // Submit the TX packet to the producer ring.
     xsk_ring_prod__submit(&xsk_socket[thread_id]->tx, 1);
+
+    // Increase outstanding.
     xsk_socket[thread_id]->outstanding_tx++;
 
+    // Complete the TX.
     complete_tx(xsk_socket[thread_id]);
 
+    // Return successful.
     return 0;
 }
 
@@ -214,36 +257,40 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 **/
 int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id)
 {
+    // Initialize starting variables and assign flags.
     flags = xdp_flags;
     int ret;
     int xsks_map_fd;
-    void *packet_buffer;
-    __u64 packet_buffer_size;
 
-    int ifidx = if_nametoindex(dev);
+    // This indicates the buffer for frames and frame size for the UMEM area.
+    void *frame_buffer;
+    __u64 frame_buffer_size = NUM_FRAMES * FRAME_SIZE;
 
-    if (ifidx < 0)
+    // Retrieve interface index and check.
+    int if_idx = if_nametoindex(dev);
+
+    if (if_idx < 0)
     {
         fprintf(stderr, "Error retrieving interface index (%s) :: %s (%d).\n", dev, strerror(errno), errno);
 
         return -1;
     }
 
-    fprintf(stdout, "Attempting to setup AF_XDP socket. Dev => %s. Index => %d. Thread ID => %d.\n", dev, ifidx, thread_id);
+    // Verbose message.
+    fprintf(stdout, "Attempting to setup AF_XDP socket. Dev => %s. Index => %d. Thread ID => %d.\n", dev, if_idx, thread_id);
 
-    // Allocate memory for NUM_FRAMES of the default XDP frame size.
-    packet_buffer_size = NUM_FRAMES * FRAME_SIZE;
-
-    if (posix_memalign(&packet_buffer, getpagesize(), packet_buffer_size)) 
+    // Allocate blank memory space for the UMEM (aligned in chunks). Check as well.
+    if (posix_memalign(&frame_buffer, getpagesize(), frame_buffer_size)) 
     {
         fprintf(stderr, "Could not allocate buffer memory for AF_XDP socket (#%d) => %s (%d).\n", thread_id, strerror(errno), errno);
 
         return -1;
     }
 
-    // Initialize shared packet_buffer for umem usage.
-    umem[thread_id] = configure_xsk_umem(packet_buffer, packet_buffer_size);
+    // Configure the UMEM and provide the memory we allocated.
+    umem[thread_id] = configure_xsk_umem(frame_buffer, frame_buffer_size);
 
+    // Check the UMEM.
     if (umem[thread_id] == NULL) 
     {
         fprintf(stderr, "Could not create umem ::  %s (%d).\n", strerror(errno), errno);
@@ -251,9 +298,10 @@ int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id)
         return -1;
     }
 
-    // Open and configure the AF_XDP (xsk) socket.
-    xsk_socket[thread_id] = xsk_configure_socket(umem[thread_id], thread_id, ifidx, (const char *)dev);
+    // Configure and create the AF_XDP/XSK socket.
+    xsk_socket[thread_id] = xsk_configure_socket(umem[thread_id], thread_id, if_idx, (const char *)dev);
 
+    // Check to make sure it's valid.
     if (xsk_socket[thread_id] == NULL) 
     {
         fprintf(stderr, "Could not setup AF_XDP socket (#%d) :: %s (%d).\n", thread_id, strerror(errno), errno);
@@ -261,15 +309,17 @@ int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id)
         return -1;
     }
 
+    // Retrieve the AF_XDP/XSK's socket FD and do a verbose print.
     int fd = xsk_socket__fd(xsk_socket[thread_id]->xsk);
 
     fprintf(stdout, "Created AF_XDP socket #%d (FD => %d).\n", thread_id, fd);
 
+    // Return the socket's file descriptor.
     return fd;
 }
 
 /**
- * Cleans up a specific AF_XDP socket.
+ * Cleans up a specific AF_XDP/XSK socket.
  * 
  * @param id The ID of the specific AF_XDP socket.
  * 
@@ -277,11 +327,13 @@ int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id)
 **/
 void cleanup_socket(__u16 id)
 {
+    // If the AF_XDP/XSK socket isn't NULL, delete it.
     if (xsk_socket[id] != NULL)
     {
         xsk_socket__delete(xsk_socket[id]->xsk);
     }
 
+    // If the UMEM isn't NULL, delete it.
     if (umem[id] != NULL)
     {
         xsk_umem__delete(umem[id]->umem);
