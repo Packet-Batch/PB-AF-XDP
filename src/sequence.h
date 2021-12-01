@@ -5,6 +5,7 @@
 #include <cmd_line.h>
 #include <config.h>
 
+#include "cmd_line.h"
 #include "main.h"
 
 #define MAX_PCKT_LEN 0xFFFF

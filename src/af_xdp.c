@@ -16,8 +16,13 @@
 #include "af_xdp.h"
 
 /* Global variables */
-// The XDP flags to load the program with.
-__u32 flags = XDP_FLAGS_DRV_MODE;
+// The XDP flags to load the AF_XDP/XSK sockets with.
+__u32 xdp_flags = XDP_FLAGS_DRV_MODE;
+__u32 bind_flags = XDP_USE_NEED_WAKEUP;
+__u8 shared_umem = 0;
+__u16 batch_size = 1;
+int static_queue_id = 0;
+int queue_id = 0;
 
 // Pointers to the umem and XSK sockets for each thread.
 struct xsk_umem_info *umem[MAX_CPUS];
@@ -64,7 +69,7 @@ static void complete_tx(struct xsk_socket_info *xsk)
     }
 
     // If we need to wakeup, execute syscall to wake up socket.
-    if (xsk_ring_prod__needs_wakeup(&xsk->tx))
+    if (!(bind_flags & XDP_USE_NEED_WAKEUP) || xsk_ring_prod__needs_wakeup(&xsk->tx))
     {
         sendto(xsk_socket__fd(xsk->xsk), NULL, 0, MSG_DONTWAIT, NULL, 0);
     }
@@ -124,12 +129,11 @@ static struct xsk_umem_info *configure_xsk_umem(void *buffer, __u64 size)
  * 
  * @param umem A pointer to the umem we created in setup_socket().
  * @param queue_id The TX queue ID to use.
- * @param ifidx The index of the interface we're binding to.
  * @param dev The name of the interface we're binding to.
  * 
  * @return Returns a pointer to the AF_XDP/XSK socket inside of a the XSK socket info structure (struct xsk_socket_info).
 **/
-static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, int queue_id, int ifidx, const char *dev)
+static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, int queue_id, const char *dev)
 {
     // Initialize starting variables.
     struct xsk_socket_config xsk_cfg;
@@ -159,10 +163,10 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     xsk_cfg.libbpf_flags = XSK_LIBBPF_FLAGS__INHIBIT_PROG_LOAD;
 
     // Assign our XDP flags.
-    xsk_cfg.xdp_flags = flags;
+    xsk_cfg.xdp_flags = xdp_flags;
 
     // Assign bind flags.
-    xsk_cfg.bind_flags = XDP_USE_NEED_WAKEUP;
+    xsk_cfg.bind_flags = bind_flags;
 
     // Attempt to create the AF_XDP/XSK socket itself at queue ID (we don't allocate a RX queue for obvious reasons).
     ret = xsk_socket__create(&xsk_info->xsk, dev, queue_id, umem->umem, NULL, &xsk_info->tx, &xsk_cfg);
@@ -247,59 +251,99 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 }
 
 /**
+ * Sets global variables from command line.
+ * 
+ * @param cmd_af_xdp A pointer to the AF_XDP-specific command line variable.
+ * 
+ * @return Void
+**/
+void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp)
+{
+    // Check for zero-copy or copy modes.
+    if (cmd_af_xdp->zero_copy)
+    {
+        bind_flags |= XDP_ZEROCOPY;
+    }
+    else if (cmd_af_xdp->copy)
+    {
+        bind_flags |= XDP_COPY;
+    }
+
+    // Check for no wakeup mode.
+    if (cmd_af_xdp->no_wake_up)
+    {
+        bind_flags &= ~XDP_USE_NEED_WAKEUP; 
+    }
+
+    // Check for a static queue ID.
+    if (cmd_af_xdp->queue_set)
+    {
+        static_queue_id = 1;
+        queue_id = cmd_af_xdp->queue;
+    }
+
+    // Check for shared UMEM.
+    if (cmd_af_xdp->shared_umem)
+    {
+        shared_umem = 1;
+        bind_flags |= XDP_SHARED_UMEM;
+    }
+
+    // Check for SKB mode.
+    if (cmd_af_xdp->skb_mode)
+    {
+        xdp_flags = XDP_FLAGS_SKB_MODE;
+    }
+
+    // Assign batch size.
+    batch_size = cmd_af_xdp->batch_size;
+}
+
+/**
  * Sets up XSK (AF_XDP) socket.
  * 
  * @param dev The interface the XDP program exists on (string).
- * @param xdp_flags The XDP flags to set on the socket.
  * @param thread_id The thread ID/number.
  * 
  * @return Returns the AF_XDP's socket FD or -1 on failure.
 **/
-int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id)
+int setup_socket(const char *dev, __u16 thread_id)
 {
-    // Initialize starting variables and assign flags.
-    flags = xdp_flags;
+    // Initialize starting variables.
     int ret;
     int xsks_map_fd;
 
-    // This indicates the buffer for frames and frame size for the UMEM area.
-    void *frame_buffer;
-    __u64 frame_buffer_size = NUM_FRAMES * FRAME_SIZE;
-
-    // Retrieve interface index and check.
-    int if_idx = if_nametoindex(dev);
-
-    if (if_idx < 0)
-    {
-        fprintf(stderr, "Error retrieving interface index (%s) :: %s (%d).\n", dev, strerror(errno), errno);
-
-        return -1;
-    }
-
     // Verbose message.
-    fprintf(stdout, "Attempting to setup AF_XDP socket. Dev => %s. Index => %d. Thread ID => %d.\n", dev, if_idx, thread_id);
-
-    // Allocate blank memory space for the UMEM (aligned in chunks). Check as well.
-    if (posix_memalign(&frame_buffer, getpagesize(), frame_buffer_size)) 
-    {
-        fprintf(stderr, "Could not allocate buffer memory for AF_XDP socket (#%d) => %s (%d).\n", thread_id, strerror(errno), errno);
-
-        return -1;
-    }
+    fprintf(stdout, "Attempting to setup AF_XDP socket. Dev => %s. Thread ID => %d.\n", dev, thread_id);
 
     // Configure the UMEM and provide the memory we allocated.
-    umem[thread_id] = configure_xsk_umem(frame_buffer, frame_buffer_size);
-
-    // Check the UMEM.
-    if (umem[thread_id] == NULL) 
+    if (!shared_umem || thread_id == 0)
     {
-        fprintf(stderr, "Could not create umem ::  %s (%d).\n", strerror(errno), errno);
+        // This indicates the buffer for frames and frame size for the UMEM area.
+        void *frame_buffer;
+        __u64 frame_buffer_size = NUM_FRAMES * FRAME_SIZE;
 
-        return -1;
+        // Allocate blank memory space for the UMEM (aligned in chunks). Check as well.
+        if (posix_memalign(&frame_buffer, getpagesize(), frame_buffer_size)) 
+        {
+            fprintf(stderr, "Could not allocate buffer memory for AF_XDP socket (#%d) => %s (%d).\n", thread_id, strerror(errno), errno);
+
+            return -1;
+        }
+
+        umem[thread_id] = configure_xsk_umem(frame_buffer, frame_buffer_size);
+
+        // Check the UMEM.
+        if (umem[thread_id] == NULL) 
+        {
+            fprintf(stderr, "Could not create umem ::  %s (%d).\n", strerror(errno), errno);
+
+            return -1;
+        }
     }
 
     // Configure and create the AF_XDP/XSK socket.
-    xsk_socket[thread_id] = xsk_configure_socket(umem[thread_id], thread_id, if_idx, (const char *)dev);
+    xsk_socket[thread_id] = xsk_configure_socket(umem[(shared_umem) ? 0 : thread_id], (static_queue_id) ? queue_id : thread_id, (const char *)dev);
 
     // Check to make sure it's valid.
     if (xsk_socket[thread_id] == NULL) 

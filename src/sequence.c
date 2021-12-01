@@ -180,7 +180,7 @@ void *thread_hdl(void *temp)
     int sock_fd;
 
     // Create AF_XDP socket and check.
-    sock_fd = setup_socket(ti->device, XDP_FLAGS_DRV_MODE, ti->id);
+    sock_fd = setup_socket(ti->device, ti->id);
 
     if (sock_fd < 0)
     {
@@ -711,6 +711,8 @@ void *thread_hdl(void *temp)
  * 
  * @param interface The networking interface to send packets out of.
  * @param seq A singular sequence structure containing relevant information for the packet.
+ * @param seq_cnt2 The sequence counter from the main program.
+ * @param cmd The command line structure.
  * 
  * @return Void
 **/

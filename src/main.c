@@ -9,6 +9,8 @@
 #include <config.h>
 
 #include "sequence.h"
+#include "cmd_line.h"
+#include "af_xdp.h"
 #include "main.h"
 
 int main(int argc, char *argv[])
@@ -26,11 +28,28 @@ int main(int argc, char *argv[])
             "-c --cfg => Path to YAML file to parse.\n" \
             "-l --list => Print basic information about sequences.\n"
             "-v --verbose => Provide verbose output.\n" \
-            "-h --help => Print out help menu and exit program.\n");
+            "-h --help => Print out help menu and exit program.\n" \
+            "--queue => If set, all AF_XDP/XSK sockets are bound to this specific queue ID.\n" \
+            "--nowakeup => If set, all AF_XDP/XSK sockets are bound without the wakeup flag.\n" \
+            "--sharedumem => If set, all AF_XDP/XSK sockets use the same UMEM area.\n" \
+            "--batchsize => How many packets to send at once (default 1).\n" \
+            "--forceskb => If set, all AF_XDP/XSK sockets are bound using the SKB flag instead of DRV mode.\n" \
+            "--zerocopy => If set, all AF_XDP/XSK sockets are attempted to be bound with zero copy mode.\n" \
+            "--copy => If set, all AF_XDP/XSK sockets are bound with copy mode.\n");
 
         return EXIT_SUCCESS;
     }
 
+    // Create AF_XDP-specific command line variable and set defaults.
+    struct cmd_line_af_xdp cmd_af_xdp = {0};
+    cmd_af_xdp.batch_size = 1;
+
+    // Parse AF_XDP-specific command line.
+    parse_cmd_line_af_xdp(&cmd_af_xdp, argc, argv);
+
+    // Set global variables in AF_XDP program.
+    setup_af_xdp_variables(&cmd_af_xdp);
+    
     // Check if config is specified.
     if (cmd.config == NULL)
     {
@@ -110,7 +129,6 @@ int main(int argc, char *argv[])
     // Loop through each sequence found.
     for (int i = 0; i < seq_cnt; i++)
     {
-
         seq_send(cfg.interface, cfg.seq[i], seq_cnt, cmd);
     }
 

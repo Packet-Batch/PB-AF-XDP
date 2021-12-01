@@ -3,6 +3,8 @@
 #include <linux/types.h>
 #include <xsk.h>
 
+#include "cmd_line.h"
+
 #define MAX_CPUS 256
 #define NUM_FRAMES 4096
 #define FRAME_SIZE XSK_UMEM__DEFAULT_FRAME_SIZE
@@ -42,5 +44,6 @@ struct xsk_socket_info
 
 
 int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose);
-int setup_socket(const char *dev, __u32 xdp_flags, __u16 thread_id);
+int setup_socket(const char *dev, __u16 thread_id);
 void cleanup_socket(__u16 id);
+void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp);
