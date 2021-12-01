@@ -161,7 +161,6 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
     struct xsk_socket_config xsk_cfg;
     struct xsk_socket_info *xsk_info;
     __u32 idx;
-    __u32 prog_id = 0;
     int i;
     int ret;
 
