@@ -68,7 +68,7 @@ sequence: mk_build libbpf
 	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) -c -o $(BUILD_DIR)/$(SEQ_OUT) $(SRC_DIR)/$(SEQ_SRC)
 
 # The main program.
-main: mk_build common $(COMMON_OBJS)
+main: mk_build $(COMMON_OBJS)
 	$(CC) -I $(COMMON_SRC_DIR) $(GLOBAL_FLAGS) $(MAIN_FLAGS) -o $(BUILD_DIR)/$(MAIN_OUT) $(COMMON_OBJS) $(BUILD_DIR)/$(SEQ_OUT) $(LIBBPF_OBJS) $(BUILD_DIR)/$(AF_XDP_OUT) $(SRC_DIR)/$(MAIN_SRC)
 
 # Cleanup (remove build files).
