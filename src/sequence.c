@@ -189,6 +189,9 @@ void *thread_hdl(void *temp)
         // Attempt to cleanup socket.
         cleanup_socket(ti->id);
 
+        // Attempt to close the socket.
+        close(sock_fd);
+
         pthread_exit(NULL);
 
         return NULL;
@@ -702,6 +705,9 @@ void *thread_hdl(void *temp)
 
     // Cleanup AF_XDP socket.
     cleanup_socket(ti->id);
+
+    // Attempt to close the socket.
+    close(sock_fd);
 
     pthread_exit(NULL);
 }
