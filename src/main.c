@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <linux/types.h>
 #include <getopt.h>
+#include <errno.h>
 
 #include <utils.h>
 #include <cmd_line.h>
@@ -127,6 +128,17 @@ int main(int argc, char *argv[])
         }
 
         return EXIT_SUCCESS;
+    }
+
+    // Before continuing, if we're in shared UMEM mode, create the first and only UMEM before going to each thread to avoid concurrency issues.
+    if (cmd_af_xdp.shared_umem)
+    {
+        if (setup_umem(0) != 0)
+        {
+            fprintf(stderr, "Error creating shared UMEM :: %s (%d).\n", strerror(-errno), errno);
+
+            return EXIT_FAILURE;
+        }
     }
 
     // Loop through each sequence found.

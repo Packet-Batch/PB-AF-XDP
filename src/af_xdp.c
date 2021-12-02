@@ -336,6 +336,40 @@ void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp, int verbose)
 }
 
 /**
+ * Sets up UMEM at specific index.
+ * 
+ * @param index Sets up UMEM at a specific index.
+ * 
+ * @return 0 on success and -1 on failure.
+**/
+int setup_umem(int index)
+{
+    // This indicates the buffer for frames and frame size for the UMEM area.
+    void *frame_buffer;
+    __u64 frame_buffer_size = NUM_FRAMES * FRAME_SIZE;
+
+    // Allocate blank memory space for the UMEM (aligned in chunks). Check as well.
+    if (posix_memalign(&frame_buffer, getpagesize(), frame_buffer_size)) 
+    {
+        fprintf(stderr, "Could not allocate buffer memory for UMEM index #%d => %s (%d).\n", index, strerror(errno), errno);
+
+        return -1;
+    }
+
+    umem[index] = configure_xsk_umem(frame_buffer, frame_buffer_size);
+
+    // Check the UMEM.
+    if (umem[index] == NULL) 
+    {
+        fprintf(stderr, "Could not create UMEM at index %d ::  %s (%d).\n", index, strerror(errno), errno);
+
+        return -1;
+    }
+
+    return 0;
+}
+
+/**
  * Sets up XSK (AF_XDP) socket.
  * 
  * @param dev The interface the XDP program exists on (string).
@@ -353,27 +387,10 @@ int setup_socket(const char *dev, __u16 thread_id)
     fprintf(stdout, "Attempting to setup AF_XDP socket. Dev => %s. Thread ID => %d.\n", dev, thread_id);
 
     // Configure the UMEM and provide the memory we allocated.
-    if (!shared_umem || thread_id == 0)
+    if (!shared_umem || thread_id > 0)
     {
-        // This indicates the buffer for frames and frame size for the UMEM area.
-        void *frame_buffer;
-        __u64 frame_buffer_size = NUM_FRAMES * FRAME_SIZE;
-
-        // Allocate blank memory space for the UMEM (aligned in chunks). Check as well.
-        if (posix_memalign(&frame_buffer, getpagesize(), frame_buffer_size)) 
+        if (setup_umem(thread_id) != 0)
         {
-            fprintf(stderr, "Could not allocate buffer memory for AF_XDP socket (#%d) => %s (%d).\n", thread_id, strerror(errno), errno);
-
-            return -1;
-        }
-
-        umem[thread_id] = configure_xsk_umem(frame_buffer, frame_buffer_size);
-
-        // Check the UMEM.
-        if (umem[thread_id] == NULL) 
-        {
-            fprintf(stderr, "Could not create umem ::  %s (%d).\n", strerror(errno), errno);
-
             return -1;
         }
 

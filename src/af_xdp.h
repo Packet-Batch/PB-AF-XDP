@@ -44,6 +44,7 @@ struct xsk_socket_info
 
 
 int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose);
+void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp, int verbose);
+int setup_umem(int index);
 int setup_socket(const char *dev, __u16 thread_id);
 void cleanup_socket(__u16 id);
-void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp, int verbose);
