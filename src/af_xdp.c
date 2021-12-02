@@ -207,8 +207,17 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     fprintf(stdout, "Sending packet in a batch size of %d...\n", batch_size);
 #endif
 
+    unsigned int idx = 0;
+
     for (int i = 0; i < batch_size; i++)
     {
+        idx = xsk_socket[thread_id]->outstanding_tx + i;
+
+        if (idx >= NUM_FRAMES)
+        {
+            break;
+        }
+        
         // We must retrieve the available address in the umem to copy our packet data to.
         __u64 addrat = xsk_socket[thread_id]->umem_frame_addr[xsk_socket[thread_id]->outstanding_tx + i];
 
