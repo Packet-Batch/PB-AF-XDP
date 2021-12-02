@@ -75,14 +75,14 @@ static void complete_tx(struct xsk_socket_info *xsk)
     }
 
     // If the TX buffer is filled, we need to free all frames and decrease the amount of outstanding TX packets.
-    completed = xsk_ring_cons__peek(&xsk->umem->cq, XSK_RING_CONS__DEFAULT_NUM_DESCS, &idx_cq);
+    completed = xsk_ring_cons__peek(&xsk->umem->cq, batch_size, &idx_cq);
 
     if (completed > 0) 
     {
         // Release "completed" frames.
         xsk_ring_cons__release(&xsk->umem->cq, completed);
 
-        xsk->outstanding_tx -= completed < xsk->outstanding_tx ? completed : xsk->outstanding_tx;
+        xsk->outstanding_tx -= completed;
     }
 }
 
@@ -213,16 +213,9 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     __u32 tx_idx = 0;
 
     // Retrieve the TX index from the TX ring to fill.
-    int ret = xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, 1, &tx_idx);
-
-    // If we don't have 1, there are no TX slots available.
-    if (ret != 1)
+    while (xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, batch_size, &tx_idx) < batch_size)
     {
-        #ifdef DEBUG
-        fprintf(stderr, "[AF_XDP] No more TX slots available.\n");
-        #endif
-
-        return -1;
+        complete_tx(xsk_socket[thread_id]);
     }
 
     // We must retrieve the available address in the umem to copy our packet data to.
@@ -231,20 +224,22 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     // We must copy our packet data to the umem area at the specific index (idx * frame size). We did this earlier.
     memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addrat), pckt, length);
 
-    // Point the TX ring's frame address to what we have in the umem.
-    xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->addr = addrat;
+    for (int i = 0; i < batch_size; i++)
+    {
+        struct xdp_desc *tx_desc = xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx + i);
 
-    // Tell the TX ring the packet length.
-    xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx)->len = length;
+        // Point the TX ring's frame address to what we have in the umem.
+        tx_desc->addr = addrat;
 
-    // Submit the TX packet to the producer ring.
-    xsk_ring_prod__submit(&xsk_socket[thread_id]->tx, 1);
+        // Tell the TX ring the packet length.
+        tx_desc->len = length;
+    }
+
+    // Submit the TX batch to the producer ring.
+    xsk_ring_prod__submit(&xsk_socket[thread_id]->tx, batch_size);
 
     // Increase outstanding.
-    xsk_socket[thread_id]->outstanding_tx++;
-
-    // Complete the TX.
-    complete_tx(xsk_socket[thread_id]);
+    xsk_socket[thread_id]->outstanding_tx += batch_size;
 
     // Return successful.
     return 0;
