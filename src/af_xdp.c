@@ -395,6 +395,8 @@ int setup_socket(const char *dev, __u16 thread_id, int verbose)
     {
         if (setup_umem(thread_id) != 0)
         {
+            fprintf(stderr, "Failed to create UMEM at index %d :: %s (%d).\n", thread_id, strerror(-errno), errno);
+
             return -1;
         }
 
@@ -420,7 +422,7 @@ int setup_socket(const char *dev, __u16 thread_id, int verbose)
     // Check to make sure it's valid.
     if (xsk_socket[thread_id] == NULL) 
     {
-        fprintf(stderr, "Could not setup AF_XDP socket (#%d) :: %s (%d).\n", thread_id, strerror(errno), errno);
+        fprintf(stderr, "Could not setup AF_XDP socket at index %d :: %s (%d).\n", thread_id, strerror(errno), errno);
 
         return -1;
     }
@@ -430,7 +432,7 @@ int setup_socket(const char *dev, __u16 thread_id, int verbose)
 
     if (verbose)
     {
-        fprintf(stdout, "Created AF_XDP socket #%d (FD => %d).\n", thread_id, fd);
+        fprintf(stdout, "Created AF_XDP socket at index %d (FD => %d).\n", thread_id, fd);
     }
 
     // Return the socket's file descriptor.
