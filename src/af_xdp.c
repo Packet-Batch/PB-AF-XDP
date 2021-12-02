@@ -29,27 +29,6 @@ struct xsk_umem_info *umem[MAX_CPUS];
 struct xsk_socket_info *xsk_socket[MAX_CPUS];
 
 /**
- * Assigns an address to a free UMEM frame.
- * 
- * @param xsk A pointer to the xsk_socket_info structure.
- * @param frame The address to assign to the UMEM frame.
- * 
- * @return Void
-**/
-static void xsk_free_umem_frame(struct xsk_socket_info *xsk, __u64 frame)
-{
-    if (xsk->umem_frame_free < NUM_FRAMES)
-    {
-        fprintf(stderr, "WARNING - UMEM free frame count is lower than the number of frames we specified.\n");
-
-        return;
-    }
-
-    // Assign the frame address to the free UMEM frame.
-    xsk->umem_frame_addr[xsk->umem_frame_free++] = frame;
-}
-
-/**
  * Completes the TX call via a syscall and also checks if we need to free the TX buffer.
  * 
  * @param xsk A pointer to the xsk_socket_info structure.
