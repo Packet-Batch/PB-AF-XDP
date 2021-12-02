@@ -199,8 +199,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 #ifdef DEBUG
         fprintf(stdout, "Completing TX (amount => %u)...\n", amt);
 #endif       
-
-        
+        complete_tx(xsk_socket[thread_id]);
     }
 
 #ifdef DEBUG
