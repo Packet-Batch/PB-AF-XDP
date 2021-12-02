@@ -217,7 +217,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
         {
             break;
         }
-        
+
         // We must retrieve the available address in the umem to copy our packet data to.
         __u64 addrat = xsk_socket[thread_id]->umem_frame_addr[xsk_socket[thread_id]->outstanding_tx + i];
 
@@ -245,6 +245,19 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 
     // Return successful.
     return 0;
+}
+
+/**
+ * Retrieve an open area in memory to store packet information in UMEM.
+ * 
+ * @param thread_id Thread ID's UMEM (0 for shared UMEM)
+ * @param pckt_cnt The current global packet count.
+ * 
+ * @return Pointer to address in memory to start data.
+**/
+void *get_umem_open_memory(int thread_id, volatile __u64 pckt_cnt)
+{
+    return xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, xsk_socket[thread_id]->umem_frame_addr[xsk_socket[thread_id]->outstanding_tx]);
 }
 
 /**
