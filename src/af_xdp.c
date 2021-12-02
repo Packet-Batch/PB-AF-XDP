@@ -238,6 +238,9 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     // Increase outstanding.
     xsk_socket[thread_id]->outstanding_tx += batch_size;
 
+    // Complete TX again.
+    complete_tx(xsk_socket[thread_id]);
+
 #ifdef DEBUG
     fprintf(stdout, "Completed batch with %u outstanding packets...\n", xsk_socket[thread_id]->outstanding_tx);
 #endif
