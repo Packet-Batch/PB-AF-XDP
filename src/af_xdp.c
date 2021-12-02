@@ -213,8 +213,14 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     __u32 tx_idx = 0;
 
     // Retrieve the TX index from the TX ring to fill.
-    while (xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, batch_size, &tx_idx) < batch_size)
+    unsigned int amt;
+
+    while ((amt = xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, batch_size, &tx_idx)) < batch_size)
     {
+#ifdef DEBUG
+        fprintf(stdout, "Completing TX...\n");
+#endif       
+
         complete_tx(xsk_socket[thread_id]);
     }
 
@@ -223,6 +229,10 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 
     // We must copy our packet data to the umem area at the specific index (idx * frame size). We did this earlier.
     memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addrat), pckt, length);
+
+#ifdef DEBUG
+    fprintf(stdout, "Sending packet in a batch size of %d...\n", batch_size);
+#endif
 
     for (int i = 0; i < batch_size; i++)
     {
@@ -240,6 +250,10 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 
     // Increase outstanding.
     xsk_socket[thread_id]->outstanding_tx += batch_size;
+
+#ifdef DEBUG
+    fprintf(stdout, "Completed batch with %u outstanding packets...\n", xsk_socket[thread_id]->outstanding_tx);
+#endif
 
     // Return successful.
     return 0;
