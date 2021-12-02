@@ -224,18 +224,18 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
         complete_tx(xsk_socket[thread_id]);
     }
 
-    // We must retrieve the available address in the umem to copy our packet data to.
-    __u64 addrat = xsk_socket[thread_id]->umem_frame_addr[xsk_socket[thread_id]->outstanding_tx];
-
-    // We must copy our packet data to the umem area at the specific index (idx * frame size). We did this earlier.
-    memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addrat), pckt, length);
-
 #ifdef DEBUG
     fprintf(stdout, "Sending packet in a batch size of %d...\n", batch_size);
 #endif
 
     for (int i = 0; i < batch_size; i++)
     {
+        // We must retrieve the available address in the umem to copy our packet data to.
+        __u64 addrat = xsk_socket[thread_id]->umem_frame_addr[xsk_socket[thread_id]->outstanding_tx + i];
+
+        // We must copy our packet data to the umem area at the specific index (idx * frame size). We did this earlier.
+        memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addrat), pckt, length);
+
         struct xdp_desc *tx_desc = xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx + i);
 
         // Point the TX ring's frame address to what we have in the umem.
