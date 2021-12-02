@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
         seq_cnt++;
     }
 
-    // Check for list option.
+    // Check for list option. If so, print helpful information for configuration.
     if (cmd.list)
     {
         fprintf(stdout, "Found %d sequences.\n", seq_cnt);
@@ -147,6 +147,7 @@ int main(int argc, char *argv[])
         seq_send(cfg.interface, cfg.seq[i], seq_cnt, cmd);
     }
 
+    // Print number of sequences completed at end.
     fprintf(stdout, "Completed %d sequences!\n", seq_cnt);
 
     // Close program successfully.

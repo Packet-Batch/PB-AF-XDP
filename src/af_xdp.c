@@ -208,8 +208,10 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 
     unsigned int idx = 0;
 
+    // Loop through to batch size.
     for (int i = 0; i < batch_size; i++)
     {
+        // Retrieve index we want to insert at in UMEM and make sure it isn't equal/above to max number of frames.
         idx = xsk_socket[thread_id]->outstanding_tx + i;
 
         if (idx >= NUM_FRAMES)
@@ -218,11 +220,12 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
         }
 
         // We must retrieve the available address in the umem to copy our packet data to.
-        __u64 addrat = xsk_socket[thread_id]->umem_frame_addr[xsk_socket[thread_id]->outstanding_tx + i];
+        __u64 addrat = xsk_socket[thread_id]->umem_frame_addr[idx];
 
         // We must copy our packet data to the umem area at the specific index (idx * frame size). We did this earlier.
         memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addrat), pckt, length);
 
+        // Retrieve TX descriptor at index.
         struct xdp_desc *tx_desc = xsk_ring_prod__tx_desc(&xsk_socket[thread_id]->tx, tx_idx + i);
 
         // Point the TX ring's frame address to what we have in the umem.
@@ -324,6 +327,7 @@ void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp, int verbose)
         }
 
         shared_umem = 1;
+        /* Note - Although documentation states to set bind flag XDP_SHARED_UMEM, this results in segfault and official sample with shared UMEMs does not do this. */
         //bind_flags |= XDP_SHARED_UMEM;
     }
 
@@ -422,13 +426,14 @@ int setup_socket(const char *dev, __u16 thread_id, int verbose)
     int id = (shared_umem) ? 0 : thread_id;
     struct xsk_umem_info *xsk_to_use = umem[id];
 
+    // Although this shouldn't happen, just check here in-case.
     if (xsk_to_use == NULL)
     {
         fprintf(stderr, "UMEM at index %d is NULL. Aborting...\n", id);
 
         return -1;
     }
-
+    
     xsk_socket[thread_id] = xsk_configure_socket(xsk_to_use, (static_queue_id) ? queue_id : thread_id, (const char *)dev);
 
     // Check to make sure it's valid.

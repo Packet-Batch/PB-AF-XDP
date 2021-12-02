@@ -45,9 +45,11 @@ __u16 seq_cnt;
 **/
 int get_src_mac_address(const char *dev, __u8 *src_mac)
 {
+    // Format path to source MAC on file system using network class.
     char path[255];
     snprintf(path, sizeof(path) - 1, "/sys/class/net/%s/address", dev);
 
+    // Attempt to open path/file and check.
     FILE *fp = fopen(path, "r");
 
     if (!fp)
@@ -55,10 +57,13 @@ int get_src_mac_address(const char *dev, __u8 *src_mac)
         return -1;
     }
 
+    // Create buffer to copy contents of file to.
     char buffer[255];
 
+    // Copy contents of file to buffer.
     fgets(buffer, sizeof(buffer), fp);
 
+    // Scan MAC address.
     sscanf(buffer, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &src_mac[0], &src_mac[1], &src_mac[2], &src_mac[3], &src_mac[4], &src_mac[5]);
 
     // Close file.
