@@ -28,5 +28,28 @@ The additional command line arguments are supported.
 
 **NOTE** - By default, each socket is created in a separate thread specified in the YAML config and is bound to a separate queue ID (incremented by 1). With that said, shared UMEM is not supported by default and each socket has its own UMEM area. The XDP wakeup flag is also specified by default which should improve performance.
 
+## Building And Installing
+Building and installing this project is fairly easy and just like the standard version. It includes building the Packet Batch Common repository which requires [libyaml](https://github.com/yaml/libyaml). As long as you use the `--recursive` flag with `git`, it should retrieve all of the required submodules automatically located in the `modules/` directory. Otherwise, you will need to go into the Common repository and execute the `git submodule update --init` command. We use `make` to build and install the application.
+
+```bash
+# Clone this repository along with its submodules.
+git clone --recursive https://github.com/Packet-Batch/PB-AF-XDP.git
+
+# Change the current working directory to PB-AF-XDP/.
+cd PB-AF-XDP/
+
+# Make and install (must be ran as root via sudo or root user itself).
+sudo make
+sudo make install
+```
+
+After installing, the executable is copied to the `/usr/bin/` directory which should be included in your `$PATH`. Therefore, you may use the application globally (in any directory).
+
+For example.
+
+```bash
+pcktbatch -c /path/to/pcktbatch.yaml
+```
+
 ## Credits
 * [Christian Deacon](https://github.com/gamemann)
