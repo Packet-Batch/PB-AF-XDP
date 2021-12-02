@@ -194,15 +194,6 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     // Retrieve the TX index from the TX ring to fill.
     unsigned int amt;
 
-    while ((amt = xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, batch_size, &tx_idx)) < batch_size)
-    {
-#ifdef DEBUG
-        fprintf(stdout, "Completing TX...\n");
-#endif       
-
-        complete_tx(xsk_socket[thread_id]);
-    }
-
 #ifdef DEBUG
     fprintf(stdout, "Sending packet in a batch size of %d...\n", batch_size);
 #endif
@@ -235,6 +226,9 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 
     // Submit the TX batch to the producer ring.
     xsk_ring_prod__submit(&xsk_socket[thread_id]->tx, batch_size);
+
+    // Complete TX.
+    complete_tx(xsk_socket[thread_id]);
 
     // Increase outstanding.
     xsk_socket[thread_id]->outstanding_tx += batch_size;
