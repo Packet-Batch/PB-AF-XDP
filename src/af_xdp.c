@@ -374,17 +374,21 @@ int setup_umem(int index)
  * 
  * @param dev The interface the XDP program exists on (string).
  * @param thread_id The thread ID/number.
+ * @param verbose Whether verbose mode is enabled.
  * 
  * @return Returns the AF_XDP's socket FD or -1 on failure.
 **/
-int setup_socket(const char *dev, __u16 thread_id)
+int setup_socket(const char *dev, __u16 thread_id, int verbose)
 {
     // Initialize starting variables.
     int ret;
     int xsks_map_fd;
 
     // Verbose message.
-    fprintf(stdout, "Attempting to setup AF_XDP socket. Dev => %s. Thread ID => %d.\n", dev, thread_id);
+    if (verbose)
+    {
+        fprintf(stdout, "Attempting to setup AF_XDP socket. Dev => %s. Thread ID => %d.\n", dev, thread_id);
+    }
 
     // Configure the UMEM and provide the memory we allocated.
     if (!shared_umem || thread_id > 0)
@@ -394,7 +398,10 @@ int setup_socket(const char *dev, __u16 thread_id)
             return -1;
         }
 
-        fprintf(stdout, "Created UMEM at index %d.\n", thread_id);
+        if (verbose)
+        {
+            fprintf(stdout, "Created UMEM at index %d.\n", thread_id);
+        }
     }
 
     // Configure and create the AF_XDP/XSK socket.
@@ -403,7 +410,7 @@ int setup_socket(const char *dev, __u16 thread_id)
 
     if (xsk_to_use == NULL)
     {
-        fprintf(stderr, "Somehow UMEM to use is NULL at index %d.\n", id);
+        fprintf(stderr, "UMEM at index %d is NULL. Aborting...\n", id);
 
         return -1;
     }
@@ -421,7 +428,10 @@ int setup_socket(const char *dev, __u16 thread_id)
     // Retrieve the AF_XDP/XSK's socket FD and do a verbose print.
     int fd = xsk_socket__fd(xsk_socket[thread_id]->xsk);
 
-    fprintf(stdout, "Created AF_XDP socket #%d (FD => %d).\n", thread_id, fd);
+    if (verbose)
+    {
+        fprintf(stdout, "Created AF_XDP socket #%d (FD => %d).\n", thread_id, fd);
+    }
 
     // Return the socket's file descriptor.
     return fd;

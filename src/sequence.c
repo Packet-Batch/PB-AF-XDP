@@ -180,7 +180,7 @@ void *thread_hdl(void *temp)
     int sock_fd;
 
     // Create AF_XDP socket and check.
-    sock_fd = setup_socket(ti->device, ti->id);
+    sock_fd = setup_socket(ti->device, ti->id, ti->cmd.verbose);
 
     if (sock_fd < 0)
     {
