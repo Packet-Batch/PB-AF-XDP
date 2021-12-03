@@ -222,7 +222,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
         }
 
         // We must retrieve the next available address in the UMEM.
-        __u64 addrat = xsk_socket[thread_id]->umem_frame_addr[idx];
+        __u64 addrat = get_umem_addr(thread_id, idx);
 
         // If we don't have static data, we need to copy the packet data to the next free UMEM area.
         if (!static_data)
