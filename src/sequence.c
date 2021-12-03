@@ -504,11 +504,14 @@ void *thread_hdl(void *temp)
         // We'll have a static packet length.
         pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
 
+        // We need to make sure we're passing 0 as the ID for shared UMEM
+        int idx = is_shared_umem() ? 0 : ti->id;
+
         for (int i = 0; i < NUM_FRAMES; i++)
         {
-            __u64 addr = get_umem_addr(ti->id, i);
+            __u64 addr = get_umem_addr(idx, i);
 
-            memcpy(get_umem_loc(ti->id, addr), buffer, pckt_len);
+            memcpy(get_umem_loc(idx, addr), buffer, pckt_len);
         }
     }
 

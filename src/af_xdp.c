@@ -295,6 +295,17 @@ void set_static_data()
 }
 
 /**
+ * Returns whether shared UMEM is enabled or not.
+ * 
+ * @return 1 on true and 0 on false.
+**/
+int is_shared_umem()
+{
+    return shared_umem;
+}
+
+
+/**
  * Sets global variables from command line.
  * 
  * @param cmd_af_xdp A pointer to the AF_XDP-specific command line variable.
