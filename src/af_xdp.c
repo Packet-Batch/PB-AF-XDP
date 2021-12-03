@@ -24,7 +24,11 @@ __u16 batch_size = 1;
 int static_queue_id = 0;
 int queue_id = 0;
 
+// Represents if we have static packet data (do not copy to UMEM on each send).
 int static_data = 0;
+
+// For shared UMEM.
+static volatile int global_frame_idx = 0;
 
 // Pointers to the umem and XSK sockets for each thread.
 struct xsk_umem_info *umem[MAX_CPUS];
@@ -64,6 +68,12 @@ static void complete_tx(struct xsk_socket_info *xsk)
         xsk_ring_cons__release(&xsk->umem->cq, completed);
 
         xsk->outstanding_tx -= completed;
+
+        // If shared UMEM + static data, subtract global frame index by completed.
+        if (shared_umem && static_data)
+        {
+            __sync_fetch_and_sub(&global_frame_idx, completed);
+        }
 
     }
 }
@@ -214,10 +224,18 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     for (int i = 0; i < batch_size; i++)
     {
         // Retrieve index we want to insert at in UMEM and make sure it isn't equal/above to max number of frames.
-        idx = xsk_socket[thread_id]->outstanding_tx + i;
+        idx = (shared_umem && static_data) ? global_frame_idx : xsk_socket[thread_id]->outstanding_tx + i;
 
         if (idx >= NUM_FRAMES)
         {
+            // If we have shared UMEM and static data, set global frame index to 0 again.
+            if (shared_umem && static_data)
+            {
+                __sync_fetch_and_sub(&global_frame_idx, global_frame_idx);
+
+                continue;
+            }
+
             break;
         }
 
@@ -246,6 +264,12 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 
     // Increase outstanding.
     xsk_socket[thread_id]->outstanding_tx += batch_size;
+
+    // If shared UMEM + static data, add to global frame index (batch size).
+    if (shared_umem && static_data)
+    {
+        __sync_fetch_and_add(&global_frame_idx, batch_size);
+    }
 
     // Complete TX again.
     complete_tx(xsk_socket[thread_id]);
