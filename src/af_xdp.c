@@ -228,7 +228,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
         if (!static_data)
         {   
             // We must copy our packet data to the UMEM area at the specific index (idx * frame size). We did this earlier.
-            memcpy(xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addrat), pckt, length);
+            memcpy(get_umem_loc(thread_id, addrat), pckt, length);
         }
 
         // Retrieve TX descriptor at index.
@@ -264,11 +264,24 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
  * @param thread_id Thread ID's.
  * @param idx The index we're retrieving (make sure it is below NUM_FRAMES).
  * 
- * @return Pointer to address in memory to start data.
+ * @return 64-bit address of location.
 **/
 __u64 get_umem_addr(int thread_id, int idx)
 {
     return xsk_socket[thread_id]->umem_frame_addr[idx];
+}
+
+/**
+ * Retrieves the memory location in the UMEM at address.
+ * 
+ * @param thread_id Thread ID's.
+ * @param addr The address received by get_umem_addr.
+ * 
+ * @return Pointer to address in memory of UMEM.
+**/
+void *get_umem_loc(int thread_id, __u64 addr)
+{
+    return xsk_umem__get_data(xsk_socket[thread_id]->umem->buffer, addr);
 }
 
 /**

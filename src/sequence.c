@@ -508,7 +508,7 @@ void *thread_hdl(void *temp)
         {
             __u64 addr = get_umem_addr(ti->id, i);
 
-            memcpy((void *)addr, buffer, pckt_len);
+            memcpy(get_umem_loc(ti->id, addr), buffer, pckt_len);
         }
     }
 
