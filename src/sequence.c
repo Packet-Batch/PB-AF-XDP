@@ -318,14 +318,14 @@ void *thread_hdl(void *temp)
             }
 
             // If we have static/same payload length, let's set the UDP header's length here.
-            if (exact_pl_len > 0 || ti->seq.pl.min_len == ti->seq.pl.max_len)
+            if ((exact_pl_len > 0 || ti->seq.pl.is_static) || ti->seq.pl.min_len == ti->seq.pl.max_len)
             {
                 data_len = (exact_pl_len > 0) ? exact_pl_len : ti->seq.pl.max_len;
 
                 udph->len = htons(l4_len + data_len);
 
                 // If we have static payload length/data or our source/destination IPs/ports are static, we can calculate the UDP header's outside of while loop.
-                if ((ti->seq.udp.src_port > 0 && ti->seq.udp.dst_port > 0 && ti->seq.ip.src_ip != NULL) && exact_pl_len > 0)
+                if ((ti->seq.udp.src_port > 0 && ti->seq.udp.dst_port > 0 && ti->seq.ip.src_ip != NULL) && (exact_pl_len > 0 || ti->seq.pl.is_static))
                 {
                     need_l4_csum = 0;
                 }
@@ -361,7 +361,7 @@ void *thread_hdl(void *temp)
             tcph->urg = ti->seq.tcp.urg;
 
             // Check if we need to do length recalculation later on.
-            if (exact_pl_len > 0 || ti->seq.pl.min_len == ti->seq.pl.max_len)
+            if ((exact_pl_len > 0 || ti->seq.pl.is_static) || ti->seq.pl.min_len == ti->seq.pl.max_len)
             {
                 data_len = (exact_pl_len > 0) ? exact_pl_len : ti->seq.pl.max_len;
 
@@ -369,7 +369,7 @@ void *thread_hdl(void *temp)
             }
 
             // If we have static payload length/data or our source/destination IPs/ports are static, we can calculate the TCP header's checksum here.
-            if (!need_len_recal && (ti->seq.tcp.src_port > 0 && ti->seq.tcp.dst_port > 0 && ti->seq.ip.src_ip != NULL) && exact_pl_len > 0)
+            if (!need_len_recal && (ti->seq.tcp.src_port > 0 && ti->seq.tcp.dst_port > 0 && ti->seq.ip.src_ip != NULL) && (exact_pl_len > 0 || ti->seq.pl.is_static))
             {
                 need_l4_csum = 0;
             }
@@ -385,13 +385,13 @@ void *thread_hdl(void *temp)
             icmph->type = ti->seq.icmp.type;
 
             // If we have static payload length/data, we can calculate the ICMP header's checksum outside of while loop.
-            if (exact_pl_len > 0 || ti->seq.pl.min_len == ti->seq.pl.max_len)
+            if ((exact_pl_len > 0 || ti->seq.pl.is_static) || ti->seq.pl.min_len == ti->seq.pl.max_len)
             {
                 data_len = (exact_pl_len > 0) ? exact_pl_len : ti->seq.pl.max_len;
 
                 need_len_recal = 0;
 
-                if (exact_pl_len > 0)
+                if (exact_pl_len > 0 || ti->seq.pl.is_static)
                 {
                     need_l4_csum = 0;
                 }
@@ -493,6 +493,24 @@ void *thread_hdl(void *temp)
     tcpsin.sin_addr.s_addr = tdaddr.s_addr;
     tcpsin.sin_port = htons(ti->seq.tcp.dst_port);
     memset(&tcpsin.sin_zero, 0, sizeof(tcpsin.sin_zero));
+
+    __u16 pckt_len;
+
+    // If our packet is completely static (no layer 3/4 checksum calculations outside of while loop), we can fill the UMEM for performance.
+    if (!need_csum && !need_l4_csum)
+    {
+        set_static_data();
+        
+        // We'll have a static packet length.
+        pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
+
+        for (int i = 0; i < NUM_FRAMES; i++)
+        {
+            __u64 addr = get_umem_addr(ti->id, i);
+
+            memcpy((void *)addr, buffer, pckt_len);
+        }
+    }
 
     // Loop.
     while (1)
@@ -661,7 +679,12 @@ void *thread_hdl(void *temp)
         }
 
         // Attempt to send packet.
-        __u16 pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
+        if (need_l4_csum || need_csum)
+        {
+            // We need to recalculate our packet length.
+            pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
+        }
+
         int ret;
 
         if ((ret = send_packet(ti->id, buffer, pckt_len, ti->cmd.verbose)) != 0)

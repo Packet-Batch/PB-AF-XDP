@@ -45,7 +45,8 @@ struct xsk_socket_info
 
 
 int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose);
-void *get_umem_open_memory(int thread_id, volatile __u64 pckt_cnt);
+__u64 get_umem_addr(int thread_id, int idx);
+void set_static_data();
 void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp, int verbose);
 int setup_umem(int index);
 int setup_socket(const char *dev, __u16 thread_id, int verbose);
