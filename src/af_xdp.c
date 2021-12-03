@@ -224,7 +224,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     for (int i = 0; i < batch_size; i++)
     {
         // Retrieve index we want to insert at in UMEM and make sure it isn't equal/above to max number of frames.
-        idx = (shared_umem && static_data) ? global_frame_idx : xsk_socket[thread_id]->outstanding_tx + i;
+        idx = ((shared_umem && static_data) ? global_frame_idx : xsk_socket[thread_id]->outstanding_tx) + i;
 
         if (idx >= NUM_FRAMES)
         {
