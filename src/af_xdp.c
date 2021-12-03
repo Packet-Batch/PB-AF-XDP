@@ -24,6 +24,9 @@ __u16 batch_size = 1;
 int static_queue_id = 0;
 int queue_id = 0;
 
+// This is only used in shared UMEM mode.
+static volatile int global_frame_cnt;
+
 // Pointers to the umem and XSK sockets for each thread.
 struct xsk_umem_info *umem[MAX_CPUS];
 struct xsk_socket_info *xsk_socket[MAX_CPUS];
@@ -62,6 +65,12 @@ static void complete_tx(struct xsk_socket_info *xsk)
         xsk_ring_cons__release(&xsk->umem->cq, completed);
 
         xsk->outstanding_tx -= completed;
+
+        // Subtract from global frame count.
+        if (shared_umem)
+        {
+            __sync_fetch_and_sub(&global_frame_cnt, completed);
+        }
     }
 }
 
@@ -192,9 +201,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     __u32 tx_idx = 0;
 
     // Retrieve the TX index from the TX ring to fill.
-    unsigned int amt;
-
-    while ((amt = xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, batch_size, &tx_idx)) < batch_size)
+    while (xsk_ring_prod__reserve(&xsk_socket[thread_id]->tx, batch_size, &tx_idx) < batch_size)
     {
 #ifdef DEBUG
         fprintf(stdout, "Completing TX (amount => %u)...\n", amt);
@@ -212,7 +219,7 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
     for (int i = 0; i < batch_size; i++)
     {
         // Retrieve index we want to insert at in UMEM and make sure it isn't equal/above to max number of frames.
-        idx = xsk_socket[thread_id]->outstanding_tx + i;
+        idx = ((shared_umem) ? global_frame_cnt : xsk_socket[thread_id]->outstanding_tx) + i;
 
         if (idx >= NUM_FRAMES)
         {
@@ -240,6 +247,13 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
 
     // Increase outstanding.
     xsk_socket[thread_id]->outstanding_tx += batch_size;
+
+    // If we're in shared UMEM mode, we have to increase the global counter.
+    if (shared_umem)
+    {
+        // Make sure we perform an atomic add due to multiple pthreads.
+        __sync_fetch_and_add(&global_frame_cnt, batch_size);
+    }
 
     // Complete TX again.
     complete_tx(xsk_socket[thread_id]);
@@ -433,7 +447,7 @@ int setup_socket(const char *dev, __u16 thread_id, int verbose)
 
         return -1;
     }
-    
+
     xsk_socket[thread_id] = xsk_configure_socket(xsk_to_use, (static_queue_id) ? queue_id : thread_id, (const char *)dev);
 
     // Check to make sure it's valid.
