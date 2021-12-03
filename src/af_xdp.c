@@ -232,8 +232,6 @@ int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose)
             if (shared_umem && static_data)
             {
                 __sync_fetch_and_sub(&global_frame_idx, global_frame_idx);
-
-                continue;
             }
 
             break;
