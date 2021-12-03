@@ -28,7 +28,7 @@ int queue_id = 0;
 int static_data = 0;
 
 // For shared UMEM.
-static volatile int global_frame_idx = 0;
+static volatile unsigned int global_frame_idx = 0;
 
 // Pointers to the umem and XSK sockets for each thread.
 struct xsk_umem_info *umem[MAX_CPUS];
