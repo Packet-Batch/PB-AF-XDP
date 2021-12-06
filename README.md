@@ -35,6 +35,12 @@ Building and installing this project is fairly easy and just like the standard v
 # Clone this repository along with its submodules.
 git clone --recursive https://github.com/Packet-Batch/PB-AF-XDP.git
 
+# Install build essentials/tools and needed libaries for LibYAML.
+sudo apt install build-essential clang autoconf libtool
+
+# Install LibELF for BPF.
+sudo apt install libelf-dev
+
 # Change the current working directory to PB-AF-XDP/.
 cd PB-AF-XDP/
 
