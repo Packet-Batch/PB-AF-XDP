@@ -49,6 +49,9 @@ sudo make
 sudo make install
 ```
 
+### Installation Video!
+[![Click here to watch!](https://g.gflclan.com/linux-laptop-bigmode-23-14-42.png)](https://www.youtube.com/watch?v=2vWJUgsbbIM)
+
 After installing, the executable is copied to the `/usr/bin/` directory which should be included in your `$PATH`. Therefore, you may use the application globally (in any directory).
 
 For example.
