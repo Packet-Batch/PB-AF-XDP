@@ -22,7 +22,7 @@ jobs:
     - name: Install LibELF for AF_XDP/LibBPF
       run: sudo apt install -y libelf-dev 
     - name: Make project
-      run: make
+      run: sudo make
     - name: Install project
       run: sudo make install
     - name: Store build artifacts
