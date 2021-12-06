@@ -1,0 +1,29 @@
+name: Run
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  reuse_build:
+    uses: Packet-Batch/PB-AF-XDP/.github/workflows/build.yml@master
+  run:
+    needs: reuse_build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifact from Build workflow
+      uses: actions/download-artifact@master
+      with:
+        name: build-output
+    - name: Run apt update
+      run: sudo apt update
+    - name: Install LibELF
+      run: sudo apt install libelf-dev
+    - name: List files
+      run: ls -la
+    - name: Add execute permissions to executable file
+      run: sudo chmod +x ./pcktbatch
+    - name: Run Packet Batch with help menu
+      run: sudo ./pcktbatch -h
