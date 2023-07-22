@@ -92,7 +92,9 @@ int main(int argc, char *argv[])
     {
         parse_cli(&cmd, &cfg);
 
-        seq_cnt++;
+        // Make sure we have at least one sequence.
+        if (seq_cnt < 1)
+            seq_cnt = 1;
     }
 
     // Check for list option. If so, print helpful information for configuration.
