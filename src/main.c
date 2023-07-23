@@ -108,23 +108,92 @@ int main(int argc, char *argv[])
 
         for (int i = 0; i < seq_cnt; i++)
         {
-            fprintf(stdout, "Sequence #%d:\n\n", i);
+            struct sequence *seq = &cfg.seq[i];
 
-            fprintf(stdout, "Includes =>\n");
+            if (!seq)
+                continue;
 
-            if (cfg.seq[i].include_count > 0)
+            fprintf(stdout, "Sequence #%d:\n", i);
+
+            // General settings.
+            fprintf(stdout, "\tGeneral\n");
+            fprintf(stdout, "\t\tIncludes =>\n");
+
+            if (seq->include_count > 0)
             {
-                for (int j = 0; j < cfg.seq[i].include_count; j++)
+                for (int j = 0; j < seq->include_count; j++)
                 {
-                    fprintf(stdout, "\t- %s\n", cfg.seq[i].includes[j]);
+                    fprintf(stdout, "\t\t\t- %s\n", seq->includes[j]);
                 }
             }
 
-            fprintf(stdout, "Block => %s\n", (cfg.seq[i].block) ? "True" : "False");
-            fprintf(stdout, "Count => %llu\n", cfg.seq[i].count);
-            fprintf(stdout, "Time => %llu\n", cfg.seq[i].time);
-            fprintf(stdout, "Delay => %llu\n", cfg.seq[i].delay);
-            fprintf(stdout, "Threads => %u\n", cfg.seq[i].threads);
+
+            fprintf(stdout, "\t\tInterface Override => %s\n", seq->interface ? seq->interface : "N/A");
+            fprintf(stdout, "\t\tBlock => %s\n", seq->block ? "True" : "False");
+            fprintf(stdout, "\t\tCount => %llu\n", seq->count);
+            fprintf(stdout, "\t\tTime => %llu\n", seq->time);
+            fprintf(stdout, "\t\tDelay => %llu\n", seq->delay);
+            fprintf(stdout, "\t\tThreads => %u\n", seq->threads);
+
+            // Ethernet settings.
+            fprintf(stdout, "\tEthernet\n");
+            fprintf(stdout, "\t\tSource MAC => %s\n", seq->eth.src_mac ? seq->eth.src_mac : "N/A");
+            fprintf(stdout, "\t\tDestination MAC => %s\n", seq->eth.dst_mac ? seq->eth.dst_mac : "N/A");
+
+            // IP settings.
+            fprintf(stdout, "\tIP\n");
+            fprintf(stdout, "\t\tProtocol => %s\n", seq->ip.protocol ? seq->ip.protocol : "N/A");
+
+            fprintf(stdout, "\t\tSource IP => %s\n", seq->ip.src_ip ? seq->ip.src_ip : "N/A");
+            fprintf(stdout, "\t\tDestination IP => %s\n", seq->ip.dst_ip ? seq->ip.dst_ip : "N/A");
+
+            if (seq->ip.range_count > 0)
+            {
+                for (int j = 0; j < seq->ip.range_count; j++)
+                    fprintf(stdout, "\t\t\t- %s\n", seq->ip.ranges[j]);
+            }
+
+            fprintf(stdout, "\t\tType of Service => %d\n", seq->ip.tos);
+            fprintf(stdout, "\t\tMin TTL => %d\n", seq->ip.min_ttl);
+            fprintf(stdout, "\t\tMax TTL => %d\n", seq->ip.max_ttl);
+            fprintf(stdout, "\t\tMin ID => %d\n", seq->ip.min_id);
+            fprintf(stdout, "\t\tMax ID => %d\n", seq->ip.max_id);
+            fprintf(stdout, "\t\tChecksum => %s\n", seq->ip.csum ? "Yes" : "No");
+
+            // TCP settings.
+            fprintf(stdout, "\tTCP\n");
+            fprintf(stdout, "\t\tSource Port => %d\n", seq->tcp.src_port);
+            fprintf(stdout, "\t\tDest Port => %d\n", seq->tcp.dst_port);
+            fprintf(stdout, "\t\tUse Socket => %s\n", seq->tcp.use_socket ? "Yes" : "No");
+            fprintf(stdout, "\t\tSYN Flag => %s\n", seq->tcp.syn ? "Yes": "No");
+            fprintf(stdout, "\t\tPSH Flag => %s\n", seq->tcp.psh ? "Yes" : "No");
+            fprintf(stdout, "\t\tFIN Flag => %s\n", seq->tcp.fin ? "Yes" : "No");
+            fprintf(stdout, "\t\tACK Flag => %s\n", seq->tcp.ack ? "Yes" : "No");
+            fprintf(stdout, "\t\tRST Flag => %s\n", seq->tcp.rst ? "Yes" : "No");
+            fprintf(stdout, "\t\tURG Flag => %s\n", seq->tcp.urg ? "Yes" : "No");
+
+            // UDP settings.
+            fprintf(stdout, "\tUDP\n");
+            fprintf(stdout, "\t\tSrc Port => %d\n", seq->udp.src_port);
+            fprintf(stdout, "\t\tDst Port => %d\n", seq->udp.dst_port);
+
+            // ICMP settings.
+            fprintf(stdout, "\tICMP\n");
+            fprintf(stdout, "\t\tCode => %d\n", seq->icmp.code);
+            fprintf(stdout, "\t\tType => %d\n", seq->icmp.type);
+
+            // Layer 4 setting(s).
+            fprintf(stdout, "\tLayer 4\n");
+            fprintf(stdout, "\t\tChecksum => %s\n", seq->l4_csum ? "Yes" : "No");
+
+            // Payload settings.
+            fprintf(stdout, "\tPayload\n");
+            fprintf(stdout, "\t\tMin Length => %d\n", seq->pl.min_len);
+            fprintf(stdout, "\t\tMax Length => %d\n", seq->pl.max_len);
+            fprintf(stdout, "\t\tIs Static => %s\n", seq->pl.is_static ? "Yes" : "No");
+            fprintf(stdout, "\t\tIs File => %s\n", seq->pl.is_file ? "Yes" : "No");
+            fprintf(stdout, "\t\tIs String => %s\n", seq->pl.is_string ? "Yes" : "No");
+            fprintf(stdout, "\t\tExact String => %s\n", seq->pl.exact ? seq->pl.exact : "N/A");
 
             fprintf(stdout, "\n\n");
         }
