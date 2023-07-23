@@ -34,7 +34,7 @@ echo "Building LibBPF..."
 make -j $THREADS libbpf
 echo "Done..."
 
-# Now build our primary objects and executables. You may use the `-j` flag followed by a number that indicates how many threads to use with the build process.
+# Now build our primary objects and executables.
 echo "Building Main..."
 make -j $THREADS
 echo "Done..."
