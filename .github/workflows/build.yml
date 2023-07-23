@@ -21,9 +21,17 @@ jobs:
       run: sudo apt install -y autoconf libtool
     - name: Install LibELF for AF_XDP/LibBPF
       run: sudo apt install -y libelf-dev 
-    - name: Make project
-      run: sudo make
-    - name: Install project
+    - name: Build Common LibYAML
+      run: sudo make -C modules/common libyaml
+    - name: Build Common Main
+      run: make -C modules/common
+    - name: Install Common
+      run: sudo make -C modules/common install
+    - name: Build LibBPF
+      run: make libbpf
+    - name: Build main
+      run: make
+    - name: Install main
       run: sudo make install
     - name: Store build artifacts
       uses: actions/upload-artifact@master
