@@ -49,8 +49,7 @@ GLOBAL_FLAGS := -O2
 MAIN_FLAGS := -pthread -lyaml -lelf -lz
 
 # Chains.
-all: mk_build common libbpf af_xdp sequence cmd_line main
-nocommon: mk_build libbpf af_xdp sequence cmd_line main
+all: mk_build af_xdp sequence cmd_line main
 
 # Creates the build directory if it doesn't already exist.
 mk_build:
@@ -70,7 +69,7 @@ af_xdp: mk_build
 	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) -c -o $(BUILD_DIR)/$(AF_XDP_OUT) $(SRC_DIR)/$(AF_XDP_SRC) 
 
 # The sequence file.
-sequence: mk_build libbpf
+sequence: mk_build
 	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) -c -o $(BUILD_DIR)/$(SEQ_OUT) $(SRC_DIR)/$(SEQ_SRC)
 
 # The command line file.
@@ -78,12 +77,13 @@ cmd_line: mk_build
 	$(CC) $(GLOBAL_FLAGS) -c -o $(BUILD_DIR)/$(CMD_LINE_OUT) $(SRC_DIR)/$(CMD_LINE_SRC)
 
 # The main program.
-main: mk_build $(COMMON_OBJS)
+main: mk_build af_xdp sequence cmd_line $(COMMON_OBJS)
 	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) $(MAIN_FLAGS) -o $(BUILD_DIR)/$(MAIN_OUT) $(COMMON_OBJS) $(LIBBPF_OBJS) $(MAIN_OBJS) $(SRC_DIR)/$(MAIN_SRC)
 
 # Cleanup (remove build files).
 clean:
 	$(MAKE) -C $(LIBBPF_SRC_DIR)/ clean
+	$(MAKE) -C $(COMMON_DIR)/ clean
 	rm -f $(BUILD_DIR)/*.o
 	rm -f $(BUILD_DIR)/$(MAIN_OUT)
 
