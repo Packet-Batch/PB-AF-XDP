@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
     {
         fprintf(stdout, "Found %d sequences.\n", seq_cnt);
 
-        fprintf(stdout, "Got interface => %s.\n", cfg.interface);
+        fprintf(stdout, "Got interface => %s.\n", cfg.interface ? cfg.interface : "N/A");
 
         fprintf(stdout, "Sequences:\n\n--------------------------\n");
 
