@@ -4,6 +4,16 @@
 ## Description
 [Packet Batch](https://github.com/Packet-Batch) is a collection of high-performance applications and tools designed for sending network packets. It serves two main purposes: penetration testing, which involves assessing network security by simulating various attacks like [Denial of Service](https://www.cloudflare.com/learning/ddos/glossary/denial-of-service/) (DoS); and network monitoring, which involves analyzing and inspecting network traffic.
 
+### Features
+* The ability to send multiple network packets in a chain via sequences.
+* Support for sending from randomized source IPs within range(s) indicated by CIDR.
+* Support for randomized payload data within a specific range in length.
+* UDP, TCP, and ICMP layer 4 protocols supported.
+* Optional layer 3 and 4 checksum calculation in the event you want the NIC's hardware to calculate checksums for generated outgoing packets.
+
+### Disclaimer
+I do **NOT** support using these tools maliciously or as a part of a targeted attack. I've made these tools to perform penetration tests against my own firewalls along with occasionally debugging network issues such as packets not arriving to their destination correctly.
+
 ## AF_XDP
 This is a special version of Packet Batch that utilizes `AF_XDP` [sockets](https://docs.kernel.org/networking/af_xdp.html) instead of `AF_PACKETv3` (which is what the standard version uses). I recommend this version over the standard version, but you must keep in mind the following.
 
