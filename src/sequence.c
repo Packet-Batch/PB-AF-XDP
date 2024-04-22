@@ -248,6 +248,8 @@ void *thread_hdl(void *temp)
             tcph->fin = ti->seq.tcp.fin;
             tcph->rst = ti->seq.tcp.rst;
             tcph->urg = ti->seq.tcp.urg;
+            tcph->ece = ti->seq.tcp.ece;
+            tcph->cwr = ti->seq.tcp.cwr;
 
             break;
 
