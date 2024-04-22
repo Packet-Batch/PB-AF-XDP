@@ -17,12 +17,14 @@ jobs:
         submodules: recursive
     - name: Run apt update
       run: sudo apt update
-    - name: Install LibYAML dependencies
-      run: sudo apt install -y autoconf libtool
+    - name: Install general dependencies
+      run: sudo apt install -y autoconf pkgconf cmake clang build-essential
     - name: Install LibELF for AF_XDP/LibBPF
       run: sudo apt install -y libelf-dev 
-    - name: Build Common LibYAML
-      run: sudo make -C modules/common libyaml
+    - name: Build Common JSON-C
+      run: make -C modules/common jsonc
+    - name: Install Common JSON-C
+      run: sudo make -C modules/common jsonc_install
     - name: Build Common Main
       run: make -C modules/common
     - name: Install Common
