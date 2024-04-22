@@ -36,43 +36,6 @@ __u64 total_data[MAX_SEQUENCES];
 __u16 seq_cnt;
 
 /**
- * Retrieves the source MAC address of an interface.
- * 
- * @param dev The interface/device name.
- * @param src_mac A pointer to the source MAC address (__u8).
- * 
- * @return 0 on success or -1 on failure (path not found).
-**/
-int get_src_mac_address(const char *dev, __u8 *src_mac)
-{
-    // Format path to source MAC on file system using network class.
-    char path[255];
-    snprintf(path, sizeof(path) - 1, "/sys/class/net/%s/address", dev);
-
-    // Attempt to open path/file and check.
-    FILE *fp = fopen(path, "r");
-
-    if (!fp)
-    {
-        return -1;
-    }
-
-    // Create buffer to copy contents of file to.
-    char buffer[255];
-
-    // Copy contents of file to buffer.
-    fgets(buffer, sizeof(buffer), fp);
-
-    // Scan MAC address.
-    sscanf(buffer, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &src_mac[0], &src_mac[1], &src_mac[2], &src_mac[3], &src_mac[4], &src_mac[5]);
-
-    // Close file.
-    fclose(fp);
-
-    return 0;
-}
-
-/**
  * The thread handler for sending/receiving.
  * 
  * @param data Data (struct thread_info) for the sequence.
@@ -86,11 +49,28 @@ void *thread_hdl(void *temp)
 
     // Let's parse some config values before creating the socket so we know what we're doing.
     __u8 protocol = IPPROTO_UDP;
-    __u8 src_mac[ETH_ALEN];
-    __u8 dst_mac[ETH_ALEN];
-    __u8 payload[MAX_PCKT_LEN];
-    __u16 exact_pl_len = 0;
-    __u16 data_len;
+    __u8 src_mac[ETH_ALEN] = {0};
+    __u8 dst_mac[ETH_ALEN] = {0};
+    __u16 data_len[MAX_PAYLOADS] = {0};
+    __u16 pckt_len[MAX_PAYLOADS] = {0};
+
+    // Payloads.
+    __u8 **payloads;
+    payloads = malloc(MAX_PAYLOADS * sizeof(__u8 *));
+    
+    if (payloads != NULL)
+    {
+        for (int i = 0; i < MAX_PAYLOADS; i++)
+        {
+            payloads[i] = malloc(MAX_PCKT_LEN * sizeof(__u8));
+        }
+    }
+    else
+    {
+        fprintf(stderr, "[%d] Failed to intialize payloads array due to allocation error.\n", ti->seq_cnt);
+
+        pthread_exit(NULL);
+    }
 
     // Let's first start off by checking if the source MAC address is set within the config.
     if (ti->seq.eth.src_mac != NULL)
@@ -114,73 +94,6 @@ void *thread_hdl(void *temp)
         protocol = IPPROTO_ICMP;
     }
 
-    // Now check for the payload.
-    if (ti->seq.pl.exact != NULL)
-    {
-        char *pl_str = NULL;
-
-        // Check if payload is file.
-        if (ti->seq.pl.is_file)
-        {
-            FILE *fp = fopen(ti->seq.pl.exact, "rb");
-            __u64 len = 0;
-
-            // Check if our file is invalid. If so, print error and set empty payload string.
-            if (fp == NULL)
-            {
-                fprintf(stderr, "Unable to open payload file (%s) :: %s.\n", ti->seq.pl.exact, strerror(errno));
-
-                pl_str = malloc(sizeof(char) * 2);
-                strcpy(pl_str, "");
-
-                goto skippayload;
-            }
-
-            // Read file and store it in payload string.
-            fseek(fp, 0, SEEK_END);
-            len = ftell(fp);
-            fseek(fp, 0, SEEK_SET);
-
-            pl_str = malloc(len);
-
-            if (pl_str)
-            {
-                fread(pl_str, 1, len, fp);
-            }
-
-            fclose(fp);
-        }
-        else
-        {
-            pl_str = strdup(ti->seq.pl.exact);
-        }
-        
-        skippayload:;
-
-        // Check if we want to parse the actual string.
-        if (ti->seq.pl.is_string)
-        {
-            exact_pl_len = strlen(pl_str);
-
-            memcpy(payload, pl_str, exact_pl_len);
-        }
-        else
-        {
-            // Split argument by space.
-            char *split;
-            char *rest = pl_str;
-
-            while ((split = strtok_r(rest, " ", &rest)))
-            {
-                sscanf(split, "%2hhx", &payload[exact_pl_len]);
-                
-                exact_pl_len++;
-            }
-        }
-
-        free(pl_str);
-    }
-
     // Initialize socket FD.
     int sock_fd;
 
@@ -189,7 +102,7 @@ void *thread_hdl(void *temp)
 
     if (sock_fd < 0)
     {
-        fprintf(stderr, "Error setting up AF_XDP socket on thread #%d.\n", ti->id);
+        fprintf(stderr, "[%d] Error setting up AF_XDP socket on thread.\n", ti->seq_cnt);
         
         // Attempt to cleanup socket.
         cleanup_socket(ti->id);
@@ -207,12 +120,12 @@ void *thread_hdl(void *temp)
     {
         if (get_src_mac_address(ti->device, src_mac) != 0)
         {
-            fprintf(stdout, "WARNING - Failed to retrieve MAC address for %s.\n", ti->device);
+            fprintf(stdout, "[%d] WARNING - Failed to retrieve MAC address for %s.\n", ti->seq_cnt, ti->device);
         }
 
         if (src_mac[0] == 0 && src_mac[1] == 0 && src_mac[2] == 0 && src_mac[3] == 0 && src_mac[4] == 0 && src_mac[5] == 0)
         {
-            fprintf(stdout, "WARNING - Source MAC address retrieved is 00:00:00:00:00:00.\n");
+            fprintf(stdout, "[%d] WARNING - Source MAC address retrieved is 00:00:00:00:00:00.\n", ti->seq_cnt);
         }
     }
 
@@ -225,17 +138,9 @@ void *thread_hdl(void *temp)
 
     if (ti->cmd.verbose)
     {
-        printf("Source MAC address (%d) => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", ti->id, src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
-        printf("Destination MAC address (%d) => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", ti->id, dst_mac[0], dst_mac[1], dst_mac[2], dst_mac[3], dst_mac[4], dst_mac[5]);
-
+        printf("[%d] Source MAC address => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", ti->seq_cnt, src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+        printf("[%d] Destination MAC address => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", ti->seq_cnt, dst_mac[0], dst_mac[1], dst_mac[2], dst_mac[3], dst_mac[4], dst_mac[5]);
     }
-
-    /* Our goal below is to set as many things before the while loop as possible since any additional instructions inside the while loop will impact performance. */
-
-    // Some variables to help decide the randomness of our packets.
-    __u8 need_csum = 1;
-    __u8 need_l4_csum = 1;
-    __u8 need_len_recal = 1;
 
     // Create rand_r() seed.
     unsigned int seed;
@@ -317,22 +222,6 @@ void *thread_hdl(void *temp)
                 udph->dest = htons(ti->seq.udp.dst_port);
             }
 
-            // If we have static/same payload length, let's set the UDP header's length here.
-            if ((exact_pl_len > 0 || ti->seq.pl.is_static) || ti->seq.pl.min_len == ti->seq.pl.max_len)
-            {
-                data_len = (exact_pl_len > 0) ? exact_pl_len : ti->seq.pl.max_len;
-
-                udph->len = htons(l4_len + data_len);
-
-                // If we have static payload length/data or our source/destination IPs/ports are static, we can calculate the UDP header's outside of while loop.
-                if ((ti->seq.udp.src_port > 0 && ti->seq.udp.dst_port > 0 && ti->seq.ip.src_ip != NULL) && (exact_pl_len > 0 || ti->seq.pl.is_static))
-                {
-                    need_l4_csum = 0;
-                }
-
-                need_len_recal = 0;
-            }
-
             break;
         
         case IPPROTO_TCP:
@@ -360,20 +249,6 @@ void *thread_hdl(void *temp)
             tcph->rst = ti->seq.tcp.rst;
             tcph->urg = ti->seq.tcp.urg;
 
-            // Check if we need to do length recalculation later on.
-            if ((exact_pl_len > 0 || ti->seq.pl.is_static) || ti->seq.pl.min_len == ti->seq.pl.max_len)
-            {
-                data_len = (exact_pl_len > 0) ? exact_pl_len : ti->seq.pl.max_len;
-
-                need_len_recal = 0;
-            }
-
-            // If we have static payload length/data or our source/destination IPs/ports are static, we can calculate the TCP header's checksum here.
-            if (!need_len_recal && (ti->seq.tcp.src_port > 0 && ti->seq.tcp.dst_port > 0 && ti->seq.ip.src_ip != NULL) && (exact_pl_len > 0 || ti->seq.pl.is_static))
-            {
-                need_l4_csum = 0;
-            }
-
             break;
 
         case IPPROTO_ICMP:
@@ -384,160 +259,133 @@ void *thread_hdl(void *temp)
             icmph->code = ti->seq.icmp.code;
             icmph->type = ti->seq.icmp.type;
 
-            // If we have static payload length/data, we can calculate the ICMP header's checksum outside of while loop.
-            if ((exact_pl_len > 0 || ti->seq.pl.is_static) || ti->seq.pl.min_len == ti->seq.pl.max_len)
-            {
-                data_len = (exact_pl_len > 0) ? exact_pl_len : ti->seq.pl.max_len;
-
-                need_len_recal = 0;
-
-                if (exact_pl_len > 0 || ti->seq.pl.is_static)
-                {
-                    need_l4_csum = 0;
-                }
-            }
-
             break;
-    }
-
-    // Check if we can set static IP header length.
-    if (!need_len_recal)
-    {
-        iph->tot_len = htons((iph->ihl * 4) + l4_len + data_len);
-    }
-
-    // Check if we need to calculate the IP checksum later on or not. If not, calculate now.
-    if (ti->seq.ip.min_ttl == ti->seq.ip.max_ttl && ti->seq.ip.min_id == ti->seq.ip.max_id && ti->seq.ip.src_ip != NULL && !need_len_recal)
-    {
-        need_csum = 0;
-
-        if (ti->seq.ip.csum)
-        {
-            update_iph_checksum(iph);
-        }
     }
 
     // Initialize payload data.
     unsigned char *data = (unsigned char *)(buffer + sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len);
 
-    // Check for exact payload.
-    if (exact_pl_len > 0)
-    {
-        for (__u16 i = 0; i < exact_pl_len; i++)
-        {
-            *(data + i) = payload[i];
-        }
-
-        // Calculate UDP and ICMP header's checksums.
-        if (!need_l4_csum && protocol == IPPROTO_UDP && ti->seq.l4_csum)
-        {
-            udph->check = 0;
-            udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, l4_len + data_len, IPPROTO_UDP, csum_partial(udph, l4_len + data_len, 0));
-        }
-        else if (!need_l4_csum && protocol == IPPROTO_TCP && ti->seq.l4_csum)
-        {
-            tcph->check = 0;
-            tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, (tcph->doff * 4) + data_len, IPPROTO_TCP, csum_partial(tcph, (tcph->doff * 4) + data_len, 0));
-        }
-        else if (!need_l4_csum && protocol == IPPROTO_ICMP && ti->seq.l4_csum)
-        {
-            icmph->checksum = 0;
-            icmph->checksum = icmp_csum((__u16 *)icmph, l4_len + data_len);
-        }
-    }
-
-    // Check for static payload.
-    if (exact_pl_len < 1 && ti->seq.pl.is_static)
-    {
-        data_len = rand_num(ti->seq.pl.min_len, ti->seq.pl.max_len, seed);
-
-        // Fill out payload with random characters.
-        for (__u16 i = 0; i < data_len; i++)
-        {
-            *(data + i) = rand_r(&seed);
-        }
-
-        // Recalculate UDP/ICMP checksums and ensure we don't calculate them again in while loop since we don't need to (will improve performance).
-        if (!need_len_recal)
-        {
-            if (protocol == IPPROTO_UDP && ti->seq.l4_csum)
-            {
-                udph->check = 0;
-                udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, l4_len + data_len, IPPROTO_UDP, csum_partial(udph, l4_len + data_len, 0));
-            }
-            if (protocol == IPPROTO_TCP && ti->seq.l4_csum)
-            {
-                tcph->check = 0;
-                tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, (tcph->doff * 4) + data_len, IPPROTO_TCP, csum_partial(tcph, (tcph->doff * 4) + data_len, 0));
-            }
-            else if (protocol == IPPROTO_ICMP && ti->seq.l4_csum)
-            {
-                icmph->checksum = 0;
-                icmph->checksum = icmp_csum((__u16 *)icmph, l4_len + data_len);
-            }
-
-            need_l4_csum = 0;
-        }
-    }
-
     // Set ending time.
     time_t end = time(NULL) + ti->seq.time;
 
-    // Setup TCP cooked socket information.
-    struct sockaddr_in tcpsin;
-    tcpsin.sin_family = AF_INET;
-
-    struct in_addr tdaddr;
-    inet_aton(ti->seq.ip.dst_ip, &tdaddr);
-
-    tcpsin.sin_addr.s_addr = tdaddr.s_addr;
-    tcpsin.sin_port = htons(ti->seq.tcp.dst_port);
-    memset(&tcpsin.sin_zero, 0, sizeof(tcpsin.sin_zero));
-
-    __u16 pckt_len;
-
-    // If our packet is completely static (no layer 3/4 checksum calculations outside of while loop), we can fill the UMEM for performance.
-    if (!need_csum && !need_l4_csum)
+    // Perform payload checks.
+    for (int i = 0; i < ti->seq.pl_cnt; i++)
     {
-        set_static_data();
-        
-        // We'll have a static packet length.
-        pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
+        struct payload_opt *pl = &ti->seq.pls[i];
+        __u8 *pl_buff = payloads[i];
 
-        // We need to make sure we're passing 0 as the ID for shared UMEM
-        int idx = is_shared_umem() ? 0 : ti->id;
-
-        for (int i = 0; i < NUM_FRAMES; i++)
+        if (pl->exact != NULL)
         {
-            __u64 addr = get_umem_addr(idx, i);
+            pl->is_static = 1;
+            
+            char *pl_str = NULL;
 
-            memcpy(get_umem_loc(idx, addr), buffer, pckt_len);
+            // Check if payload is file.
+            if (pl->is_file)
+            {
+                FILE *fp = fopen(pl->exact, "rb");
+                __u64 len = 0;
+
+                // Check if our file is invalid. If so, print error and set empty payload string.
+                if (fp == NULL)
+                {
+                    fprintf(stderr, "Unable to open payload file on payload #%d (%s) :: %s.\n", i + 1, pl->exact, strerror(errno));
+
+                    pl_str = malloc(sizeof(char) * 2);
+                    strcpy(pl_str, "");
+
+                    goto skippayload;
+                }
+
+                // Read file and store it in payload string.
+                fseek(fp, 0, SEEK_END);
+                len = ftell(fp);
+                fseek(fp, 0, SEEK_SET);
+
+                pl_str = malloc(len);
+
+                if (pl_str)
+                {
+                    fread(pl_str, 1, len, fp);
+                }
+
+                fclose(fp);
+            }
+            else
+            {
+                pl_str = strdup(pl->exact);
+            }
+            
+            skippayload:;
+
+            // Check if we want to parse the actual string.
+            if (pl->is_string)
+            {
+                data_len[i] = strlen(pl_str);
+
+                memcpy(pl_buff, pl_str, data_len[i]);
+            }
+            else
+            {
+                // Split argument by space.
+                char *split;
+                char *rest = pl_str;
+
+                while ((split = strtok_r(rest, " ", &rest)))
+                {
+                    sscanf(split, "%2hhx", &pl_buff[data_len[i]]);
+
+                    data_len[i]++;
+                }
+            }
+
+            // Set packet length now.
+            pckt_len[i] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len + data_len[i];
+
+            free(pl_str);
         }
+        else if (pl->is_static)
+        {
+            // Generate random payload between a range if needed.
+            if (pl->max_len > 0)
+            {
+                // Calculate a random length
+                data_len[i] = rand_num(pl->min_len, pl->max_len, seed);
+                pckt_len[i] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len + data_len[i];
+
+                // Fill out payload with random characters.
+                for (__u16 i = 0; i < data_len[i]; i++)
+                {
+                    *(pl_buff + i) = rand_r(&seed);
+                }
+            }
+            else
+            {
+                // 0 bytes of payload.
+                data_len[i] = 0;
+                pckt_len[i] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len;
+            }
+        }
+    }
+
+    // If we have no payloads, set to an empty payload.
+    if (ti->seq.pl_cnt < 1)
+    {
+        ti->seq.pl_cnt = 1;
+
+        struct payload_opt *pl = &ti->seq.pls[0];
+        pl->is_static = 1;
+
+        // Calculate lengths.
+        data_len[0] = 0;
+        pckt_len[0] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len;
     }
 
     // Loop.
     while (1)
     {
-        // Increase count and check.
-        if (ti->seq.count > 0 || ti->seq.track_count)
-        {
-            if (ti->seq.count > 0 && count[ti->seq_cnt] >= ti->seq.count)
-            {
-                break;
-            }
-
-            __sync_add_and_fetch(&count[ti->seq_cnt], 1);
-        }
-
-        // Check time.
-        if (ti->seq.time > 0 && time(NULL) >= end)
-        {
-            break;
-        }
-
+        // Generate seed for random integers.
         seed = time(NULL) ^ count[ti->seq_cnt];
-
-        /* Assign random IP header values if need to be. */
 
         // Check for random TTL.
         if (ti->seq.ip.min_ttl != ti->seq.ip.max_ttl)
@@ -562,7 +410,7 @@ void *thread_hdl(void *temp)
                 // Ensure this range is valid.
                 if (ti->seq.ip.ranges[ran] != NULL)
                 {
-                    if (ti->seq.count < 1 && !ti->seq.track_count)
+                    if (ti->seq.max_count < 1 && !ti->seq.track_count)
                     {
                         count[ti->seq_cnt]++;
                     }
@@ -581,7 +429,7 @@ void *thread_hdl(void *temp)
                 else
                 {
                     fail:
-                    fprintf(stderr, "ERROR - Source range count is above 0, but string is NULL. Please report this! Using localhost...\n");
+                    fprintf(stderr, "[%d] ERROR - Source range count is above 0, but string is NULL. Please report this! Using localhost...\n", ti->seq_cnt);
 
                     strcpy(s_ip, "127.0.0.1");
                 }
@@ -589,7 +437,7 @@ void *thread_hdl(void *temp)
             else
             {
                 // This shouldn't happen, but since it did, just assign localhost and warn the user.
-                fprintf(stdout, "WARNING - No source IP or source range(s) specified. Using localhost...\n");
+                fprintf(stdout, "[%d] WARNING - No source IP or source range(s) specified. Using localhost...\n", ti->seq_cnt);
 
                 strcpy(s_ip, "127.0.0.1");
             }
@@ -599,18 +447,6 @@ void *thread_hdl(void *temp)
             inet_aton(s_ip, &s_addr);
 
             iph->saddr = s_addr.s_addr;
-        }
-        
-        // Check if we need to calculate random payload.
-        if (exact_pl_len < 1 && !ti->seq.pl.is_static)
-        {
-            data_len = rand_num(ti->seq.pl.min_len, ti->seq.pl.max_len, seed);
-
-            // Fill out payload with random characters.
-            for (__u16 i = 0; i < data_len; i++)
-            {
-                *(data + i) = rand_r(&seed);
-            }
         }
 
         // Check layer-4 protocols and assign random characteristics if need to be.
@@ -627,19 +463,6 @@ void *thread_hdl(void *temp)
             {
                 udph->dest = htons(rand_num(1, 65535, seed));
             }
-
-            // Check for UDP length recalculation.
-            if (need_len_recal)
-            {
-                udph->len = htons(l4_len + data_len);
-            }
-
-            // Check for UDP checksum recalculation.
-            if (need_l4_csum && ti->seq.l4_csum)
-            {
-                udph->check = 0;
-                udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, sizeof(struct udphdr) + data_len, IPPROTO_UDP, csum_partial(udph, sizeof(struct udphdr) + data_len, 0));   
-            }
         }
         else if (protocol == IPPROTO_TCP)
         {
@@ -652,68 +475,138 @@ void *thread_hdl(void *temp)
             {
                 tcph->dest = htons(rand_num(1, 65535, seed));
             }
+        }
 
-            // Check if we need to calculate checksum.
-            if (need_l4_csum && ti->seq.l4_csum)
+        // Loop through each payload.
+        for (int i = 0; i < ti->seq.pl_cnt; i++)
+        {
+            struct payload_opt *pl = &ti->seq.pls[i];
+
+            // Check if we need to calculate random payload.
+            if (pl->is_static)
             {
-                tcph->check = 0;
-                tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, (tcph->doff * 4) + data_len, IPPROTO_TCP, csum_partial(tcph, (tcph->doff * 4) + data_len, 0));   
+                if (data_len[i] > 0)
+                {
+                    memcpy(data, payloads[i], data_len[i]);
+                }
             }
-        }
-        else if (protocol == IPPROTO_ICMP)
-        {
-            if (need_l4_csum && ti->seq.l4_csum)
+            else
             {
-                icmph->checksum = 0;
-                icmph->checksum = icmp_csum((__u16 *)icmph, l4_len + data_len);
-            }
-        }
-        
-        // Check for length recalculation for IP header.
-        if (need_len_recal)
-        {
-            iph->tot_len = htons((iph->ihl * 4) + l4_len + data_len);
-        }
+                if (pl->max_len > 0)
+                {
+                    // Recalculate length to random.
+                    data_len[i] = rand_num(pl->min_len, pl->max_len, seed);
+                    pckt_len[i] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len + data_len[i];
 
-        // Check if we need to calculate IP checksum.
-        if (need_csum && ti->seq.ip.csum)
-        {
-            update_iph_checksum(iph);
-        }
-
-        // Attempt to send packet.
-        if (need_l4_csum || need_csum)
-        {
-            // We need to recalculate our packet length.
-            pckt_len = ntohs(iph->tot_len) + sizeof(struct ethhdr);
-        }
-
-        int ret;
-
-        if ((ret = send_packet(ti->id, buffer, pckt_len, ti->cmd.verbose)) != 0)
-        {
-            fprintf(stderr, "ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", ti->id, strerror(errno));
-        }
-
-        // Check if we want to send verbose output or not.
-        if (ti->cmd.verbose && ret == 0)
-        {
-            // Retrieve source and destination ports for UDP/TCP protocols.
-            __u16 srcport = 0;
-            __u16 dstport = 0;
-
-            if (protocol == IPPROTO_UDP)
-            {
-                srcport = ntohs(udph->source);
-                dstport = ntohs(udph->dest);
-            }
-            else if (protocol == IPPROTO_TCP)
-            {
-                srcport = ntohs(tcph->source);
-                dstport = ntohs(tcph->dest);
+                    // Fill out payload with random characters.
+                    for (__u16 i = 0; i < data_len[i]; i++)
+                    {
+                        *(data + i) = rand_r(&seed);
+                    }
+                }
+                else if (pckt_len[i] < 1)
+                {
+                    pckt_len[i] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len + data_len[i];
+                }
             }
 
-            fprintf(stdout, "Sent %d bytes of data from %s:%d to %s:%d.\n", pckt_len, (ti->seq.ip.src_ip != NULL) ? ti->seq.ip.src_ip : s_ip, srcport, ti->seq.ip.dst_ip, dstport);
+            // Perform checksum and length calculations for layer-4 headers.
+            switch (iph->protocol)
+            {
+                case IPPROTO_UDP:
+                    udph->len = htons(sizeof(struct udphdr) + data_len[i]);
+                    
+                    if (ti->seq.l4_csum)
+                    {
+                        udph->check = 0;
+                        udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, l4_len + data_len[i], IPPROTO_UDP, csum_partial(udph, l4_len + data_len[i], 0));
+                    }
+
+                    break;
+
+                case IPPROTO_TCP:
+                    if (ti->seq.l4_csum)
+                    {
+                        tcph->check = 0;
+                        tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, l4_len + data_len[i], IPPROTO_TCP, csum_partial(tcph, l4_len + data_len[i], 0));
+                    }
+
+                    break;
+
+                case IPPROTO_ICMP:
+                    if (ti->seq.l4_csum)
+                    {
+                        icmph->checksum = 0;
+                        icmph->checksum = icmp_csum((__u16 *)icmph, l4_len + data_len[i]);
+                    }
+
+                    break;
+            }
+
+            // Calculate IP header total length and checksum if necessary.
+            iph->tot_len = htons((iph->ihl * 4) + l4_len + data_len[i]);
+
+            if (ti->seq.ip.csum)
+            {
+                update_iph_checksum(iph);
+            }
+
+            // Send packet out.
+            int ret = 0;
+
+            /*
+            if ((ret = send_packet(ti->id, buffer, pckt_len[i], ti->cmd.verbose)) != 0)
+            {
+                fprintf(stderr, "ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", ti->id, strerror(errno));
+            }
+            */
+
+            // Check if we want to send verbose output or not.
+            if (ti->cmd.verbose && ret == 0)
+            {
+                // Retrieve source and destination ports for UDP/TCP protocols.
+                __u16 srcport = 0;
+                __u16 dstport = 0;
+
+                if (protocol == IPPROTO_UDP)
+                {
+                    srcport = ntohs(udph->source);
+                    dstport = ntohs(udph->dest);
+                }
+                else if (protocol == IPPROTO_TCP)
+                {
+                    srcport = ntohs(tcph->source);
+                    dstport = ntohs(tcph->dest);
+                }
+
+                fprintf(stdout, "[%d][%d] Sent %d bytes of data from %s:%d to %s:%d.\n", ti->seq_cnt, i + 1, pckt_len[i], (ti->seq.ip.src_ip != NULL) ? ti->seq.ip.src_ip : s_ip, srcport, ti->seq.ip.dst_ip, dstport);
+            }
+
+            // Increment total bytes for sequence so far.
+            __sync_add_and_fetch(&total_data[ti->seq_cnt], pckt_len[i]);
+        }
+
+        // Check packet count.
+        if (ti->seq.max_count > 0 || ti->seq.track_count)
+        {
+            // Increment current count.
+            __sync_add_and_fetch(&count[ti->seq_cnt], 1);
+
+            // Check if we should break.
+            if (ti->seq.max_count > 0 && count[ti->seq_cnt] >= ti->seq.max_count)
+            {
+                fprintf(stdout, "[%d] Packet count exceeded for sequence. Stopping...\n", ti->seq_cnt);
+
+                break;
+            }            
+        }
+
+        // Check time.
+        if (ti->seq.time > 0 && time(NULL) >= end)
+        {
+            fprintf(stdout, "[%d] Time exceeded for sequence. Stopping...\n", ti->seq_cnt);
+
+            break;
         }
 
         // Check data.
@@ -721,10 +614,10 @@ void *thread_hdl(void *temp)
         {
             if (total_data[ti->seq_cnt] >= ti->seq.max_data)
             {
+                fprintf(stdout, "[%d] Max data exceeded for sequence. Stopping...\n", ti->seq_cnt);
+
                 break;
             }
-
-            __sync_add_and_fetch(&total_data[ti->seq_cnt], pckt_len);
         }
 
         // Check for delay.
@@ -739,6 +632,9 @@ void *thread_hdl(void *temp)
 
     // Attempt to close the socket.
     close(sock_fd);
+    
+    // Free payloads.
+    free(payloads);
 
     pthread_exit(NULL);
 }

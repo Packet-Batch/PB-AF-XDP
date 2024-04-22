@@ -27,18 +27,7 @@ int main(int argc, char *argv[])
     // Help menu.
     if (cmd.help)
     {
-        fprintf(stdout, "Usage: pcktseq -c <configfile> [-v -h]\n\n" \
-            "-c --cfg => Path to YAML file to parse.\n" \
-            "-l --list => Print basic information about sequences.\n"
-            "-v --verbose => Provide verbose output.\n" \
-            "-h --help => Print out help menu and exit program.\n" \
-            "--queue => If set, all AF_XDP/XSK sockets are bound to this specific queue ID.\n" \
-            "--nowakeup => If set, all AF_XDP/XSK sockets are bound without the wakeup flag.\n" \
-            "--sharedumem => If set, all AF_XDP/XSK sockets use the same UMEM area.\n" \
-            "--batchsize => How many packets to send at once (default 1).\n" \
-            "--forceskb => If set, all AF_XDP/XSK sockets are bound using the SKB flag instead of DRV mode.\n" \
-            "--zerocopy => If set, all AF_XDP/XSK sockets are attempted to be bound with zero copy mode.\n" \
-            "--copy => If set, all AF_XDP/XSK sockets are bound with copy mode.\n");
+        print_cmd_help();
 
         return EXIT_SUCCESS;
     }
@@ -58,7 +47,7 @@ int main(int argc, char *argv[])
     if (cmd.config == NULL)
     {
         // Copy default values.
-        cmd.config = "/etc/pcktbatch/pcktbatch.yaml";
+        cmd.config = "/etc/pcktbatch/conf.json";
 
         // Let us know if we're using the default config when the verbose flag is specified.
         if (cmd.verbose)
@@ -68,13 +57,15 @@ int main(int argc, char *argv[])
     }
 
     // Create config structure.
-    struct config cfg = {0};
+    struct config *cfg = malloc(sizeof(struct config));
+    memset(cfg, 0, sizeof(*cfg));
+
     int seq_cnt = 0;
 
     // Set default values on each sequence.
     for (int i = 0; i < MAX_SEQUENCES; i++)
     {
-        clear_sequence(&cfg, i);
+        clear_sequence(cfg, i);
     }
 
     // Attempt to parse config.
@@ -86,11 +77,11 @@ int main(int argc, char *argv[])
         log = 0;    
     }
 
-    parse_config(cmd.config, &cfg, 0, &seq_cnt, log);
+    parse_config(cmd.config, cfg, 0, &seq_cnt, log);
 
     if (cmd.cli)
     {
-        parse_cli(&cmd, &cfg);
+        parse_cli(&cmd, cfg);
 
         // Make sure we have at least one sequence.
         if (seq_cnt < 1)
@@ -100,7 +91,7 @@ int main(int argc, char *argv[])
     // Check for list option. If so, print helpful information for configuration.
     if (cmd.list)
     {
-        print_config(&cfg, seq_cnt);
+        print_config(cfg, seq_cnt);
 
         return EXIT_SUCCESS;
     }
@@ -119,11 +110,14 @@ int main(int argc, char *argv[])
     // Loop through each sequence found.
     for (int i = 0; i < seq_cnt; i++)
     {
-        seq_send(cfg.interface, cfg.seq[i], seq_cnt, cmd);
+        seq_send(cfg->interface, cfg->seq[i], seq_cnt, cmd);
     }
 
     // Print number of sequences completed at end.
     fprintf(stdout, "Completed %d sequences!\n", seq_cnt);
+
+    // Free config pointer.
+    free(cfg);
 
     // Close program successfully.
     return EXIT_SUCCESS;
