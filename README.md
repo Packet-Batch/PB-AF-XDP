@@ -155,7 +155,21 @@ There is additional command line usage with the AF_XDP version which may be foun
 ## Configuration File
 If you want to use more than one sequence or more control, you will need to specify sequences inside of a config file using the [JSON syntax](https://www.w3schools.com/js/js_json_syntax.asp).
 
-Here is the config file format.
+Before continuing, here is information on the types used below with the config.
+
+| Name | Length (Bytes) | Unsigned | Description |
+| ---- | ------ | -------- | ----------- |
+| string | `N/A` | no | A string terminated by `\0`. |
+| byte | 1 | yes | A single byte integer. |
+| boolean | 1 | yes | A single `true` (1) or `false` (0) value. |
+| ushort | 2 | yes | An unsigned short. |
+| short | 2 | no | A short. |
+| uint | 4 | yes | An unsigned integer. |
+| int | 4 | no | An integer. |
+| long | 8 | no | A long. |
+| ulong | 8 | yes | An unsigned long. |
+
+Here is the full config file format.
 
 | Key | Type | Default | Description |
 | --- | ---- | ------- | ----------- |
