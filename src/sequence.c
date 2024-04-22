@@ -554,14 +554,12 @@ void *thread_hdl(void *temp)
             }
 
             // Send packet out.
-            int ret = 0;
+            int ret;
 
-            /*
             if ((ret = send_packet(ti->id, buffer, pckt_len[i], ti->cmd.verbose)) != 0)
             {
                 fprintf(stderr, "ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", ti->id, strerror(errno));
             }
-            */
 
             // Check if we want to send verbose output or not.
             if (ti->cmd.verbose && ret == 0)
