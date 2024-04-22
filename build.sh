@@ -15,16 +15,19 @@ echo "Building Packet Batch (AF_XDP) using $THREADS threads..."
 # First, we want to build our common objects which includes LibYAML. Read the PB-Common directory for more information.
 echo "Building Common Repository..."
 
-echo "Building LibYAML..."
-sudo make -j $THREADS -C modules/common libyaml
+echo "Building JSON-C..."
+make -j $THREADS -C modules/common jsonc
 echo "Done..."
 
+echo "Installing JSON-C..."
+sudo make -j $THREADS -C modules/common jsonc_install
+
 echo "Building Common Main..."
-make -j $THREADS -C modules/common
+make -j $THREADS common
 echo "Done..."
 
 echo "Installing Common..."
-sudo make -j $THREADS -C modules/common install
+sudo make -j $THREADS common_install
 echo "Done..."
 
 echo "Building AF_XDP Version..."

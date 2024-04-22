@@ -1,6 +1,13 @@
 # Use Clang to compile the common files.
 CC = clang
 
+# Package config.
+PKG_CONF = pkg-config
+
+ifeq ($(shell which $(PKG_CONF)),)
+$(error "Package config not found. Please install it on server.")
+endif
+
 # Directories.
 BUILD_DIR := build
 SRC_DIR := src
@@ -45,7 +52,7 @@ MAIN_SRC := main.c
 MAIN_OUT := pcktbatch
 
 # Global and main flags.
-GLOBAL_FLAGS := -O2
+GLOBAL_FLAGS := -O2 -g
 MAIN_FLAGS := -pthread -lyaml -lelf -lz
 
 # Chains.
@@ -62,6 +69,8 @@ libbpf:
 # Build and install the Packet Batch common submodule (this includes libyaml).
 common:
 	$(MAKE) -C $(COMMON_DIR)/
+	
+common_install:
 	$(MAKE) -C $(COMMON_DIR)/ install
 
 # The AF_XDP file.
@@ -78,7 +87,7 @@ cmd_line: mk_build
 
 # The main program.
 main: mk_build af_xdp sequence cmd_line $(COMMON_OBJS)
-	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) $(MAIN_FLAGS) -o $(BUILD_DIR)/$(MAIN_OUT) $(COMMON_OBJS) $(LIBBPF_OBJS) $(MAIN_OBJS) $(SRC_DIR)/$(MAIN_SRC)
+	$(CC) -I $(COMMON_SRC_DIR) -I $(LIBBPF_SRC_DIR) $(GLOBAL_FLAGS) $(MAIN_FLAGS) -o $(BUILD_DIR)/$(MAIN_OUT) $(shell $(PKG_CONF) --libs json-c) $(COMMON_OBJS) $(LIBBPF_OBJS) $(MAIN_OBJS) $(SRC_DIR)/$(MAIN_SRC)
 
 # Cleanup (remove build files).
 clean:
