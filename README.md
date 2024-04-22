@@ -58,6 +58,8 @@ cd PB-AF-XDP/
 sudo make clean
 ```
 
+![Install GIF](./images/install.gif)
+
 ### Installation Video!
 [![Click here to watch!](https://i.imgur.com/pD3H1vw.jpeg)](https://www.youtube.com/watch?v=2vWJUgsbbIM)
 
@@ -159,7 +161,7 @@ Before continuing, here is information on the types used below with the config.
 
 | Name | Length (Bytes) | Unsigned | Description |
 | ---- | ------ | -------- | ----------- |
-| string | `N/A` | no | A string terminated by `\0`. |
+| string | N/A | N/A | A string terminated by `\0`. |
 | byte | 1 | yes | A single byte integer. |
 | boolean | 1 | yes | A single `true` (1) or `false` (0) value. |
 | ushort | 2 | yes | An unsigned short. |
