@@ -5,7 +5,7 @@
 [Packet Batch](https://github.com/Packet-Batch) is a collection of high-performance applications and tools designed for sending network packets. It serves two main purposes: penetration testing, which involves assessing network security by simulating various attacks like [Denial of Service](https://www.cloudflare.com/learning/ddos/glossary/denial-of-service/) (DoS); and network monitoring, which involves analyzing and inspecting network traffic.
 
 ### Features
-* The ability to send multiple network packets in a chain via sequences.
+* The ability to send multiple network packets in a chain via sequences and multiple payloads inside of a single sequence coming from the same source.
 * Support for sending from randomized source IPs within range(s) indicated by CIDR.
 * Support for randomized payload data within a specific range in length.
 * UDP, TCP, and ICMP layer 4 protocols supported.
@@ -15,27 +15,35 @@
 I do **NOT** support using these tools maliciously or as a part of a targeted attack. I've made these tools to perform penetration tests against my own firewalls along with occasionally debugging network issues such as packets not arriving to their destination correctly.
 
 ## AF_XDP
-This is a special version of Packet Batch that utilizes `AF_XDP` [sockets](https://docs.kernel.org/networking/af_xdp.html) instead of `AF_PACKETv3` (which is what the standard version uses). I recommend this version over the standard version, but you must keep in mind the following.
+This is a special version of Packet Batch that utilizes `AF_XDP` [sockets](https://docs.kernel.org/networking/af_xdp.html) instead of `AF_PACKETv3` (which is what the standard version uses). I recommend using this version over the standard version due to performance improvements, but you must keep in mind the following.
 
-1. AF_XDP sockets requires a **more recent** Linux kernel.
-1. The TCP `usesocket` setting is **NOT** available in this version due to cooked sockets not being a thing within AF_XDP.
+1. AF_XDP sockets require a **more recent** Linux kernel.
+1. The TCP `cooked` and `oneconnection` settings are **NOT** available in this version due to no cooked sockets support in AF_XDP.
 
 The above is why we aren't utilizing AF_XDP sockets in the standard version.
 
 From the benchmarks I've concluded on my home server running Proxmox VMs, AF_XDP sockets send around 5 - 10% more packets per second than the standard version and the amount of packets per second it is sending is a lot more consistent (regardless of the batch size option explained below). I won't have solid benchmarks until I perform these tests on full dedicated hardware which should happen in early 2022.
 
 ## Building And Installing
-Building and installing this project is fairly easy and just like the standard version. It includes building the Packet Batch Common repository which requires [libyaml](https://github.com/yaml/libyaml). As long as you use the `--recursive` flag with `git`, it should retrieve all of the required submodules automatically located in the `modules/` directory. Otherwise, you will need to go into the Common repository and execute the `git submodule update --init` command. We use `make` to build and install the application.
+Building and installing this project is fairly easy and just like the standard version. It includes building the Packet Batch Common repository which requires [JSON-C](https://github.com/json-c/json-c). As long as you use the `--recursive` flag with `git`, it should retrieve all of the required submodules automatically located in the `modules/` directory. Otherwise, you will need to go into the Common repository and execute the `git submodule update --init` command. We use `make` to build and install the application.
+
+The following commands should work for Ubuntu/Debian-based systems. However, you should be able to install this on other Linux distros with a few adjustments as well.
 
 ```bash
+# Update apt.
+sudo apt update
+
+# Install Git if it isn't already installed.
+sudo apt install -y git
+
 # Clone this repository along with its submodules.
 git clone --recursive https://github.com/Packet-Batch/PB-AF-XDP.git
 
-# Install build essentials/tools and needed libaries for LibYAML.
-sudo apt install build-essential clang autoconf libtool
+# Install build essentials/tools and needed libaries for JSON-C.
+sudo apt install -y build-essential clang cmake pkgconf
 
 # Install LibELF for BPF.
-sudo apt install libelf-dev
+sudo apt install -y libelf-dev
 
 # Change the current working directory to PB-AF-XDP/.
 cd PB-AF-XDP/
@@ -46,19 +54,21 @@ cd PB-AF-XDP/
 # NOTE - The first argument represents the amount of threads to use with make. 0 uses the amount of available threads on the system and supplying no argument uses 1 thread.
 ./build.sh 0
 
-# You may use the following to clean the build. You must run this as root or sudo because of the Common's LibYAML clean.
+# You may use the following to clean the build. You must run this as root or sudo because of the Common's cleanup.
 sudo make clean
 ```
 
 ### Installation Video!
 [![Click here to watch!](https://i.imgur.com/pD3H1vw.jpeg)](https://www.youtube.com/watch?v=2vWJUgsbbIM)
 
+**Warning!** - The installation video is a bit outdated, but should show most of the installation process. Since the video was made, we've switched to `json-c` from `libyaml` and use a build script to build the project and its dependencies ([`./build.sh`](./build.sh)).
+
 After installing, the executable is copied to the `/usr/bin/` directory which should be included in your `$PATH`. Therefore, you may use the application globally (in any directory).
 
 For example.
 
 ```bash
-pcktbatch -c /path/to/pcktbatch.yaml
+pcktbatch -c /path/to/conf.json
 ```
 
 ## Command Line Usage
@@ -68,14 +78,14 @@ Basic command line usage may be found below.
 ```bash
 Usage: pcktbatch -c <configfile> [-v -h]
 
--c --cfg => Path to YAML file to parse.
+-c --cfg => Path to the config file.
 -l --list => Print basic information about sequences.
 -v --verbose => Provide verbose output.
 -h --help => Print out help menu and exit program.
 ```
 
 ### First Sequence Override
-If you wanted to quickly send packets and don't want to create a YAML config file, you may specify command line options to override the first sequence. You must also specify the `-z` or `--cli` flag in order to do this.
+If you wanted to quickly send packets and don't want to create a config file, you may specify command line options to override the first sequence. You must also specify the `-z` or `--cli` flag in order to do this.
 
 The following command line options are available to override the first sequence.
 
@@ -90,30 +100,32 @@ The following command line options are available to override the first sequence.
 --threads => The amount of threads and sockets to spawn (0 = CPU count).
 --l4csum => Whether to calculate the layer-4 checksum (TCP, UDP, and ICMP) (0/1).
 
---srcmac => The ethernet source MAC address to use.
---dstmac => The ethernet destination MAC address to use.
+--smac => The ethernet source MAC address to use.
+--dmac => The ethernet destination MAC address to use.
 
 --minttl => The minimum IP TTL to use.
 --maxttl => The maximum IP TTL to use.
 --minid => The minimum IP ID to use.
 --maxid => The maximum IP ID to use.
---srcip => The source IP (one range is supported in CIDR format).
---dstip => The destination IP.
+--sip => The source IP (one range is supported in CIDR format).
+--dip => The destination IP.
 --protocol => The protocol to use (TCP, UDP, or ICMP).
 --tos => The IP TOS to use.
 --l3csum => Whether to calculate the IP header checksum or not (0/1).
 
---usrcport => The UDP source port.
---udstport => The UDP destination port.
+--usport => The UDP source port.
+--udport => The UDP destination port.
 
---tsrcport => The TCP source port.
---tdstport => The TCP destination port.
---tsyn => Set the TCP SYN flag (0/1).
---tack => Set the TCP ACK flag (0/1).
---tpsh => Set the TCP PSH flag (0/1).
---trst => Set the TCP RST flag (0/1).
---tfin => Set the TCP FIN flag (0/1).
---turg => Set the TCP URG flag (0/1).
+--tsport => The TCP source port.
+--tdport => The TCP destination port.
+--syn => Set the TCP SYN flag (0/1).
+--ack => Set the TCP ACK flag (0/1).
+--psh => Set the TCP PSH flag (0/1).
+--rst => Set the TCP RST flag (0/1).
+--fin => Set the TCP FIN flag (0/1).
+--urg => Set the TCP URG flag (0/1).
+--ece => Set the TCP ECE flag (0/1).
+--cwr => Set the TCP CWR flag (0/1).
 
 --pmin => The minimum payload data.
 --pmax => The maximum payload data.
@@ -138,164 +150,342 @@ There is additional command line usage with the AF_XDP version which may be foun
 
 **NOTE** - The **batch size** indicates how many packets to send at the same time, but this is the **same** packet data. This may or may not speed up performance, but personally I didn't see much of an impact.
 
-**NOTE** - By default, each socket is created in a separate thread specified in the YAML config and is bound to a separate queue ID (incremented by 1). With that said, shared UMEM is not supported by default and each socket has its own UMEM area. The XDP wakeup flag is also specified by default which should improve performance.
+**NOTE** - By default, each socket is created in a separate thread specified in the config and is bound to a separate queue ID (incremented by 1). With that said, shared UMEM is not supported by default and each socket has its own UMEM area. The XDP wakeup flag is also specified by default which should improve performance.
 
 ## Configuration File
-If you want to use more than one sequence or more control, you will need to specify sequences inside of a config file using the [YAML syntax](https://docs.ansible.com/ansible/latest/reference_appendices/YAMLSyntax.html). Please see the following for an explanation.
+If you want to use more than one sequence or more control, you will need to specify sequences inside of a config file using the [JSON syntax](https://www.w3schools.com/js/js_json_syntax.asp).
 
-```yaml
-# The interface to send packets out of.
-interface: myinterface
+Here is the config file format.
 
-sequences:
-    seq01:
-        # An array of other configs to include before this sequence. WARNING - If this is used, you must write this at the beginning of the sequence like this example. Otherwise, unexpected results will occur (e.g. the current sequence will be overwritten). This is empty by default and only showing as an example.
-        includes:
-            - /etc/pcktbatch/include_one.yaml
-            - /etc/pcktbatch/include_two.yaml
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `interface` | string | `null` | The default interface to send packets out of. |
+| `sequences` | Array `Sequence` Object | `[]` | An array of sequences to use (see below). |
 
-        # If set, will use a specific interface for this sequence. Otherwise, uses the default interface specified at the beginning of the config.
-        interface: NULL
+<details>
+    <summary>Examples</summary>
+Basic config.
 
-        # If true, future sequences will wait until this one finishes before executing.
-        block: true
+```json
+{
+    "interface": "devint",
+    "sequences": [
+        {
+            ...
+        },
+        {
+            ...
+        }
+    ]
+}
+```
+</details>
 
-        # The maximum packets this sequence can produce before terminating.
-        count: 0
+### Sequence Object
+The sequence object has the following fields.
 
-        # The maximum bytes this sequence can produce before terminating.
-        data: 0
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `interface` | string | `null` | The interface to use when sending out of this sequence. |
+| `block` | boolean | `true` | Whether to block the main thread/other sequences until this sequence is completed. |
+| `count` | ulong | `0` | If above 0, will limit the sequence packet count to this number before exiting. |
+| `data` | ulong | `0` | If above 0, will limit the sequence total bytes sent to this number before exiting. |
+| `time` | ulong | `0` | If above 0, will limit the sequence to this amount of time in seconds before exiting. |
+| `threads` | ushort | `0` | If 0, will spawn *x* amount of threads for this sequence. Otherwise, uses CPU count. |
+| `delay` | ulong | `1000000` | The delay between each iteration in the sequence in microseconds. |
+| `trackcount` | boolean | `true` | If enabled, tracks the packet count. This must be enabled for `count` to work. |
+| `l4csum` | boolean | `true` | Whether to calculate the layer-4 checksum in the program. |
+| `eth` | Ethernet Object | `{}` | The ethernet header object (see below). |
+| `ip` | IP Object | `{}` | The IP header object (see below). |
+| `udp` | UDP Object | `{}` | The UDP header object (see below). |
+| `tcp` | TCP Object | `{}` | The TCP header object (see below). |
+| `icmp` | ICMP Object | `{}` | The ICMP header object (see below). |
+| `payloads` | Array `Payload` Object | `[]` | The payloads array (see below). |
 
-        # How long in seconds this sequence can go on before terminating.
-        time: 0
+<details>
+    <summary>Examples</summary>
 
-        # The amount of threads to spawn with this sequence. If this is set to 0, it will use the CPU count (recommended).
-        threads: 0
+The following sends packets out of the `dev` interface. It blocks the thread and only runs for 20 seconds. There is a 100000 microsecond delay in-between sending packets on the main sequence.
 
-        # The delay between sending packets on each thread in microseconds.
-        delay: 1000000
+```json
+{
+    "interface": "dev",
+    "block": true,
+    "time": 20,
+    "delay": 100000,
+    "eth": {
+        ...
+    },
+    "ip": {
+        ...
+    },
+    "tcp": {
+        ...
+    },
+    "udp": {
+        ...
+    },
+    "icmp": {
+        ...
+    },
+    "payloads": [
+        ...
+    ]
+}
+```
+</details>
 
-        # If true, even if 'count' is set to 0, the program will keep a packet counter inside of each thread. As of right now, a timestamp (in seconds) and a packet counter is used to generate a seed for randomness within the packet. If you want true randomness with every packet and not with each second, it is recommended you set this to true. Otherwise, this may result in better performance if kept set to false.
-        trackcount: false 
-        
-        # Ethernet header options.
-        eth:
-            # The source MAC address. If not set, the program will retrieve the MAC address of the interface we are binding to (the "interface" value).
-            #srcmac: NULL
 
-            # The destination MAC address. If not set, the program will retrieve the default gateway's MAC address.
-            #dstmac: NULL
-        
-        # IP header options.
-        ip:
-            # Source ranges in CIDR format. By default, these aren't set, but I wanted to show an example anyways. These will be used if 'srcip' is not set.
-            ranges:
-                - 172.16.0.0/16
-                - 10.60.0.0/24
-                - 192.168.30.0/24
-            
-            # The source IPv4 address. If not set, you will need to specify source ranges in CIDR format like the above. If no source IP ranges are set, a warning will be outputted to `stderr` and 127.0.0.1 (localhost) will be used.
-            #srcip: NULL
+#### Ethernet Object
+The ethernet object contains the following fields.
 
-            # The destination IPv4 address. If not set, the program will output an error. We require a value here. Otherwise, the program will shutdown.
-            #dstip: NULL
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `smac` | string | `null` | The source MAC address to use. If not set, will attempt to retrieve the source MAC address automatically. |
+| `dmac` | string | `null` | The destination MAC address to use. If not set, will attempt to retrieve the destination MAC address automatically via gateway. |
 
-            # The IP protocol to use. At the moment, the only supported values are udp, tcp, and icmp.
-            protocol: udp
+<details>
+    <summary>Examples</summary>
 
-            # The Type-Of-Service field (8-bit integer).
-            tos: 0
-            
-            # The Time-To-Live field (8-bit integer). For static, set min and max to the same value.
-            ttl:
-                # Each packet generated will pick a random TTL. This is the minimum value within that range.
-                min: 0
+The following sends packets from `09:EB:23:AB:2D:B1` to `08:EC:4B:23:F2:E3`.
 
-                # Each packet generated will pick a random TTL This is the maximum value within that range.
-                max: 0
-            
-            # The ID field. For static, set min and max to the same value.
-            id:
-                # Each packet generated will pick a random ID. This is the minimum value within that range.
-                min: 0
+```json
+{
+    "smac": "09:EB:23:AB:2D:B1",
+    "dmac": "08:EC:4B:23:F2:E3"
+}
+```
+</details>
 
-                # Each packet generated will pick a random ID. This is the maximum value within that range.
-                max: 0
+#### IP Object
+The IP object contains the following fields.
 
-            # If true, we will calculate the IP header's checksum. If your NIC supports checksum offload with the IP header, disabling this option may improve performance within the program.
-            csum: true
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `sip` | string | `null` | The source IP to send from. |
+| `dip` | string | `null` | The destination IP to send to. |
+| `protocol` | string | `null` | The layer-4 protocol. Available options include `tcp`, `udp`, and `icmp`. |
+| `tos` | byte | `0` | The Type of Server (ToS) to use. |
+| `csum` | boolean | `true` | Whether to calculate the IP header checksum. |
+| `ttl` | TTL Object | `{}` | The TTL object (see below). |
+| `id` | ID Object | `{}` | The ID object (see below). |
+| `ranges` | Array `String` | `{}` | An array of IP ranges that should be in the `<ip>/<cidr>` format. |
 
-        # If true, we will calculate the layer-4 protocol checksum (UDP, TCP, and ICMP).
-        l4csum: true
+<details>
+    <summary>Examples</summary>
 
-        # UDP header options.
-        udp:
-            # The source port. If 0, the program will generate a random number between 1 and 65535.
-            srcport: 0
+Here's an example that sends packets from `192.168.2.2` to `192.168.2.3`. The protocol is TCP.
 
-            # The destination port. If 0, the program will generate a random number between 1 and 65535.
-            dstport: 0
-
-        # TCP header options.
-        tcp:
-            # The source port. If 0, the program will generate a random number between 1 and 65535.
-            srcport: 0
-
-            # The destination port. If 0, the program will generate a random number between 1 and 65535.
-            dstport: 0
-
-            # If true, will set the TCP SYN flag.
-            syn: false
-
-            # If true, will set the TCP ACK flag.
-            ack: false
-        
-            # If true, will set the TCP PSH flag.
-            psh: false
-
-            # If true, will set the TCP RST flag.
-            rst: false
-
-            # If true, will set the TCP FIN flag.
-            fin: false
-
-            # If true, will set the TCP URG flag.
-            urg: false
-
-        # ICMP header options.
-        icmp:
-            # The code to use with the ICMP packet.
-            code: 0
-
-            # The type to use with the ICMP packet.
-            type: 0
-
-        # Payload options.
-        payload:
-            # Random payload generation/length.
-            length:
-                # The minimum payload length in bytes (payload is randomly generated).
-                min: 0
-
-                # The maximum payload length in bytes (payload is randomly generated).
-                max: 0
-
-            # If true, the application will only generate one payload per thread between the minimum and maximum lengths and generate the checksums once. In many cases, this will result in a huge performance gain because generating random payload per packet consumes a lot of CPU cycles depending on the payload length.
-            isstatic: false
-
-            # If true, the application will read data from the file 'exact' (below) is set to. The data within the file should be in the same format as the 'exact' setting without file support which is hexadecimal and separated by a space (e.g. "FF FF FF FF 59").
-            isfile: false
-
-            # If true, will parse the payload (either in 'exact' or the file within 'exact') as a string instead of hexadecimal.
-            isstring: false
-
-            # If a string, will set the payload to exactly this value. Each byte should be in hexadecimal and separated by a space. For example: "FF FF FF FF 59" (5 bytes of payload data).
-            #exact: NULL
+```json
+{
+    "sip": "192.168.2.2",
+    "dip": "192.168.2.3",
+    "protocol": "tcp",
+    "csum": true,
+    "ttl": {
+        ...
+    },
+    "id": {
+        ...
+    },
+    "ranges": [
+        ...
+    ]
+}
 ```
 
-There are configuration examples [here](https://github.com/Packet-Batch/PB-Tests).
+Here's another example that sends packets from random IPs within the `10.4.0.0/24` and `10.5.0.0/24` ranges to `10.3.0.2`. The protocol used is UDP.
 
-**NOTE** - The default config path is `/etc/pcktbatch/pcktbatch.yaml`. This may be changed via the `-c` and `--cfg` flags as explained under the Command Line Usage section below.
+```json
+{
+    "sip": null,
+    "dip": "10.3.0.2",
+    "protocol": "udp",
+    "csum": true,
+    "ranges": [
+        "10.4.0.0/24",
+        "10.5.0.0/24"
+    ]
+}
+```
+</details>
+
+##### TTL Object
+The TTL object contains the following fields.
+
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `min` | byte | `64` | The minimum TTL to use. |
+| `max` | byte | `64` | The maximum TTL to use. |
+
+<details>
+    <summary>Examples</summary>
+
+Here's an example of generating a TTL between `64` and `128` every time we generate a packet.
+
+```json
+{
+    "min": 64,
+    "max": 128
+}
+```
+</details>
+
+##### ID Object
+The ID object contains the following.
+
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `min` | byte | `0` | The minimum ID to use. |
+| `max` | byte | `64000` | The maximum ID to use. |
+
+<details>
+    <summary>Examples</summary>
+
+Here's an example of generating an ID between `4000` and `9000` every time we generate a packet.
+
+```json
+{
+    "min": 4000,
+    "max": 9000
+}
+```
+</details>
+
+#### TCP Object
+The TCP object contains the following fields.
+
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `sport` | ushort | `0` | The TCP source port to use. If 0, will generate a random port. |
+| `dport` | ushort | `0`| The TCP destination port to use. If 0, will generate a random port.
+| `syn` | boolean | `false` | Sets the TCP SYN flag. |
+| `psh` | boolean | `false` | Sets the TCP PSH flag. |
+| `fin` | boolean | `false` | Sets the TCP FIN flag. |
+| `ack` | boolean | `false` | Sets the TCP ACK flag. |
+| `rst` | boolean | `false` | Sets the TCP RST flag. |
+| `urg` | boolean | `false` | Sets the TCP URG flag. |
+| `ece` | boolean | `false` | Sets the TCP ECE flag. |
+| `cwr` | boolean | `false` | Sets the TCP CWR flag. |
+
+<details>
+    <summary>Examples</summary>
+
+Here's an example of sending packets with the SYN flag set to port `80`.
+
+```json
+{
+    "dport": 80,
+    "syn": true
+}
+```
+</details>
+
+#### UDP Object
+The UDP object contains the following.
+
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `sport` | ushort | `0` | The UDP source port to use. If 0, will generate a random port. |
+| `dport` | ushort | `0` | The UDP destination port to use. If 0, will generate a random port. |
+
+<details>
+    <summary>Examples</summary>
+
+Here's an example of sending packets from UDP source port `27005` to destination port `27015`.
+
+```json
+{
+    "sport": 27005,
+    "dport": 27015
+}
+```
+</details>
+
+#### ICMP Object
+The ICMP object contains the following fields.
+
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `code` | byte | `0` | The ICMP code to set. |
+| `type` | byte | `0` | The ICMP type to set. |
+
+<details>
+    <summary>Examples</summary>
+
+Here's an example of sending an ICMP echo request (type 8 and code 0).
+
+```json
+{
+    "code": 0,
+    "type": 8
+}
+```
+</details>
+
+#### Payload Object
+The payload object contains the following fields.
+
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `exact` | string | `null` | The exact payload in hexadecimal. |
+| `isstatic` | boolean | `false` | Whether the payload is static (shouldn't change). If `exact` isn't set, it will generate payload once and reuse that payload each time. |
+| `isfile` | boolean | `false` | Whether `exact` should act as the path to the file and read as is. |
+| `isstring` | boolean | `false` | Whether to parse `exact` as a string instead of hexadecimal. |
+| `length` | Length Object | `{}` | The length object (see below). |
+
+<details>
+    <summary>Examples</summary>
+
+This example sends packets with the payload `0x01 0xFB 0x02 0xFC` (4 bytes in payload size).
+
+```json
+{
+    "exact": "01 FB 02 FC"
+}
+```
+
+This example sends packets with a random payload between 0 and 5 bytes.
+
+```json
+{
+    "length": {
+        "min": 0,
+        "max": 5
+    }
+}
+```
+
+This example parses `./mypayload.txt` as hexadecimal and uses that as the payload.
+
+```json
+{
+    "exact": "./mypayload.txt",
+    "isfile": true
+}
+```
+
+This example parses `GET / HTTP/1.0\r\nHost: 1.2.3.4\r\n\r\n` as a string and uses that as the payload.
+
+```json
+{
+    "exact": "GET / HTTP/1.0\r\nHost: 1.2.3.4\r\n\r\n",
+    "isstring": true
+}
+```
+</details>
+
+##### Length Object
+The length object contains the following fields.
+
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `min` | ushort | `0` | The minimum length. |
+| `max` | ushort | `0` | The maximum length. |
+
+If you are looking for full examples, please check out [this repository](https://github.com/Packet-Batch/PB-Tests).
+
+**NOTE** - The default config path is `/etc/pcktbatch/conf.json`. This may be changed via the `-c` and `--cfg` flags as explained under the Command Line Usage section below.
 
 ## Credits
 * [Christian Deacon](https://github.com/gamemann)
