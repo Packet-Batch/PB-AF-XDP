@@ -584,6 +584,12 @@ void *thread_hdl(void *temp)
 
             // Increment total bytes for sequence so far.
             __sync_add_and_fetch(&total_data[ti->seq_cnt], pckt_len[i]);
+
+            // Check for delay.
+            if (ti->seq.delay > 0)
+            {
+                usleep(ti->seq.delay);
+            }
         }
 
         // Check packet count.
@@ -618,12 +624,6 @@ void *thread_hdl(void *temp)
 
                 break;
             }
-        }
-
-        // Check for delay.
-        if (ti->seq.delay > 0)
-        {
-            usleep(ti->seq.delay);
         }
     }
 
