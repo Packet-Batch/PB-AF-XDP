@@ -14,6 +14,13 @@
 ### Disclaimer
 I do **NOT** support using these tools maliciously or as a part of a targeted attack. I've made these tools to perform penetration tests against my own firewalls along with occasionally debugging network issues such as packets not arriving to their destination correctly.
 
+### Showcase
+These are just a couple of basic tests I performed between two virtual machines on my home server.
+
+![Test One](./images/test1.gif)
+
+![Test Two](./images/test2.gif)
+
 ## AF_XDP
 This is a special version of Packet Batch that utilizes `AF_XDP` [sockets](https://docs.kernel.org/networking/af_xdp.html) instead of `AF_PACKETv3` (which is what the standard version uses). I recommend using this version over the standard version due to performance improvements, but you must keep in mind the following.
 
