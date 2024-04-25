@@ -383,11 +383,17 @@ void *thread_hdl(void *temp)
         pckt_len[0] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len;
     }
 
+    // Create timespec for seed.
+    struct timespec ts = {0};
+
     // Loop.
     while (1)
     {
-        // Generate seed for random integers.
-        seed = time(NULL) ^ count[ti->seq_cnt];
+        // Retrieve current time.
+        clock_gettime(CLOCK_BOOTTIME, &ts);
+
+        // Generate seed (we use nanoseconds).
+        seed = ts.tv_nsec;
 
         // Check for random TTL.
         if (ti->seq.ip.min_ttl != ti->seq.ip.max_ttl)
