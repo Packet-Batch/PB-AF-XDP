@@ -2,7 +2,7 @@
 [![Packet Batch AF_XDP Build Workflow](https://github.com/Packet-Batch/PB-AF-XDP/actions/workflows/build.yml/badge.svg)](https://github.com/Packet-Batch/PB-AF-XDP/actions/workflows/build.yml) [![Packet Batch AF_XDP Run Workflow](https://github.com/Packet-Batch/PB-AF-XDP/actions/workflows/run.yml/badge.svg)](https://github.com/Packet-Batch/PB-AF-XDP/actions/workflows/run.yml)
 
 ## Description
-[Packet Batch](https://github.com/Packet-Batch) is a collection of high-performance applications and tools designed for sending network packets. It serves two main purposes: penetration testing, which involves assessing network security by simulating various attacks like [Denial of Service](https://www.cloudflare.com/learning/ddos/glossary/denial-of-service/) (DoS); and network monitoring, which involves analyzing and inspecting network traffic.
+[Packet Batch](https://github.com/Packet-Batch) is a collection of high-performance applications and tools designed for generating and sending network packets. It serves two main purposes: penetration testing, which involves assessing network security by simulating various attacks like [Denial of Service](https://www.cloudflare.com/learning/ddos/glossary/denial-of-service/) (DoS); and network monitoring, which involves analyzing and inspecting network traffic.
 
 ### Features
 * The ability to send multiple network packets in a chain via sequences and multiple payloads inside of a single sequence coming from the same source.
