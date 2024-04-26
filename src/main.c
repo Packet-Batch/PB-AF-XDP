@@ -136,6 +136,8 @@ int main(int argc, char *argv[])
     for (int i = 0; i < seq_cnt; i++)
     {
         seq_send(cfg->interface, cfg->seq[i], seq_cnt, cmd);
+
+        sleep(1);
     }
 
     shutdown_prog(cfg);
