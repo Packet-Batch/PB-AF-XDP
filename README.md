@@ -99,13 +99,14 @@ If you wanted to quickly send packets and don't want to create a config file, yo
 The following command line options are available to override the first sequence.
 
 ```bash
---interface => The interface to send out of.
---block => Whether to enable blocking mode (0/1).
---count => The maximum amount of packets supported.
---time => How many seconds to run the sequence for maximum.
+-z --cli => Enables the first sequence/packet override.
+
+--interface => The interface to send out of.    --block => Whether to enable blocking mode (0/1).       --track => Track packet and byte statistics and print at the end (0/1). Will impact performance!
+--maxpckts => The maximum amount of packets to send during this sequence before exiting.
+--maxbytes => The maximum amount of bytes to send during this sequence before exiting.
+--pps => The amount of packets per second to limit this sequence to (0 = disabled).
+--bps => The amount of bytes per second to limit this sequence to (0 = disabled)
 --delay => The delay in-between sending packets on each thread.
---data => The maximum amount of data (in bytes) we can send.
---trackcount => Keep track of count regardless of it being 0 (read Configuration explanation for more information) (0/1).
 --threads => The amount of threads and sockets to spawn (0 = CPU count).
 --l4csum => Whether to calculate the layer-4 checksum (TCP, UDP, and ICMP) (0/1).
 
@@ -126,7 +127,7 @@ The following command line options are available to override the first sequence.
 --udport => The UDP destination port.
 
 --tsport => The TCP source port.
---tdport => The TCP destination port.
+--tdport => The TCP source port.
 --syn => Set the TCP SYN flag (0/1).
 --ack => Set the TCP ACK flag (0/1).
 --psh => Set the TCP PSH flag (0/1).
@@ -175,8 +176,8 @@ Before continuing, here is information on the types used below with the config.
 | short | 2 | no | A short. |
 | uint | 4 | yes | An unsigned integer. |
 | int | 4 | no | An integer. |
-| long | 8 | no | A long. |
 | ulong | 8 | yes | An unsigned long. |
+| long | 8 | no | A long. |
 
 Here is the full config file format.
 
@@ -211,12 +212,14 @@ The sequence object has the following fields.
 | --- | ---- | ------- | ----------- |
 | `interface` | string | `null` | The interface to use when sending out of this sequence. |
 | `block` | boolean | `true` | Whether to block the main thread/other sequences until this sequence is completed. |
-| `count` | ulong | `0` | If above 0, will limit the sequence packet count to this number before exiting. |
-| `data` | ulong | `0` | If above 0, will limit the sequence total bytes sent to this number before exiting. |
+| `track` | boolean | `false` | Tracks total packets/bytes including average per second for the sequence and prints before the program exits. This will impact performance! |
+| `maxpckts` | ulong | `0` | If above 0, the sequence will exit after hitting this amount of total packets sent. |
+| `maxbytes` | ulong | `0` | If above 0, the sequence will exit after hitting this amount of total bytes sent. |
+| `pps` | ulong | `0` | If above 0, will limit the sequence to this amount of packets per second. |
+| `bps` | ulong | `0` | If above 0, will limit the sequence to this amount of bytes per second. |
 | `time` | ulong | `0` | If above 0, will limit the sequence to this amount of time in seconds before exiting. |
 | `threads` | ushort | `0` | If 0, will spawn *x* amount of threads for this sequence. Otherwise, uses CPU count. |
-| `delay` | ulong | `1000000` | The delay between each iteration in the sequence in microseconds. |
-| `trackcount` | boolean | `true` | If enabled, tracks the packet count. This must be enabled for `count` to work. |
+| `delay` | ulong | `1000000` | The delay between each iteration (sent packet) in the sequence in microseconds. |
 | `l4csum` | boolean | `true` | Whether to calculate the layer-4 checksum in the program. |
 | `eth` | Ethernet Object | `{}` | The ethernet header object (see below). |
 | `ip` | IP Object | `{}` | The IP header object (see below). |
@@ -256,8 +259,67 @@ The following sends packets out of the `dev` interface. It blocks the thread and
     ]
 }
 ```
-</details>
 
+The following sends packets out of the `dev` interface. It blocks the thread and only runs until 3000 packets sent. there is no delay between sending packets, so it will send packets as fast as it can.
+
+```json
+{
+    "interface": "dev",
+    "block": true,
+    "maxpckts": 3000,
+    "time": 0,
+    "delay": 0,
+    "eth": {
+        ...
+    },
+    "ip": {
+        ...
+    },
+    "tcp": {
+        ...
+    },
+    "udp": {
+        ...
+    },
+    "icmp": {
+        ...
+    },
+    "payloads": [
+        ...
+    ]
+}
+```
+
+The following sends packets out of the `dev` interface. It blocks the thread and runs until you hit CTRL + C or use another method to kill the process. The sequence is limited to sending 300 packets per second.
+
+```json
+{
+    "interface": "dev",
+    "block": true,
+    "pps": 300,
+    "time": 0,
+    "delay": 0,
+    "eth": {
+        ...
+    },
+    "ip": {
+        ...
+    },
+    "tcp": {
+        ...
+    },
+    "udp": {
+        ...
+    },
+    "icmp": {
+        ...
+    },
+    "payloads": [
+        ...
+    ]
+}
+```
+</details>
 
 #### Ethernet Object
 The ethernet object contains the following fields.

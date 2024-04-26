@@ -5,6 +5,7 @@
 #include <linux/types.h>
 #include <getopt.h>
 #include <errno.h>
+#include <signal.h>
 
 #include <utils.h>
 #include <cmd_line.h>
@@ -15,6 +16,26 @@
 #include "af_xdp.h"
 #include "main.h"
 
+struct config *cfg = NULL;
+
+/**
+ * Signal handler to shut down the program.
+ * 
+ * @return Void
+*/
+void sign_hdl(int sig)
+{
+    shutdown_prog(cfg);
+}
+
+/**
+ * The main program.
+ * 
+ * @param argc The amount of arguments.
+ * @param argv An array of arguments passed to program.
+ * 
+ * @return Int (exit code)
+*/
 int main(int argc, char *argv[])
 {
     // Create command line structure.
@@ -57,7 +78,7 @@ int main(int argc, char *argv[])
     }
 
     // Create config structure.
-    struct config *cfg = malloc(sizeof(struct config));
+    cfg = malloc(sizeof(struct config));
     memset(cfg, 0, sizeof(*cfg));
 
     int seq_cnt = 0;
@@ -107,17 +128,17 @@ int main(int argc, char *argv[])
         }
     }
 
+    // Setup signals to exit the program.
+    signal(SIGINT, sign_hdl);
+    signal(SIGTERM, sign_hdl);
+
     // Loop through each sequence found.
     for (int i = 0; i < seq_cnt; i++)
     {
         seq_send(cfg->interface, cfg->seq[i], seq_cnt, cmd);
     }
 
-    // Print number of sequences completed at end.
-    fprintf(stdout, "Completed %d sequences!\n", seq_cnt);
-
-    // Free config pointer.
-    free(cfg);
+    shutdown_prog(cfg);
 
     // Close program successfully.
     return EXIT_SUCCESS;

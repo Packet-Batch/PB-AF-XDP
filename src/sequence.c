@@ -31,8 +31,21 @@
 
 #include <csum.h>
 
-__u64 count[MAX_SEQUENCES];
-__u64 total_data[MAX_SEQUENCES];
+pthread_t threads[MAX_THREADS];
+int thread_cnt = 0;
+
+// Total counters.
+__u64 total_bytes[MAX_SEQUENCES] = {0};
+__u64 total_pckts[MAX_SEQUENCES] = {0};
+
+// Per second counters and variables.
+time_t last_updated[MAX_SEQUENCES] = {0};
+__u64 cur_pps[MAX_SEQUENCES] = {0};
+__u64 cur_bps[MAX_SEQUENCES] = {0};
+
+time_t start_time[MAX_SEQUENCES] = {0};
+time_t end_time[MAX_SEQUENCES] = {0};
+
 __u16 seq_cnt;
 
 /**
@@ -46,6 +59,9 @@ void *thread_hdl(void *temp)
 {
     // Cast data as thread info.
     struct thread_info *ti = (struct thread_info *)temp;
+
+    // Get human-friendly sequence ID (id + 1).
+    int seq_num = ti->seq_cnt + 1;
 
     // Let's parse some config values before creating the socket so we know what we're doing.
     __u8 protocol = IPPROTO_UDP;
@@ -67,7 +83,7 @@ void *thread_hdl(void *temp)
     }
     else
     {
-        fprintf(stderr, "[%d] Failed to intialize payloads array due to allocation error.\n", ti->seq_cnt);
+        fprintf(stderr, "[%d] Failed to intialize payloads array due to allocation error.\n", seq_num);
 
         pthread_exit(NULL);
     }
@@ -102,7 +118,7 @@ void *thread_hdl(void *temp)
 
     if (sock_fd < 0)
     {
-        fprintf(stderr, "[%d] Error setting up AF_XDP socket on thread.\n", ti->seq_cnt);
+        fprintf(stderr, "[%d] Error setting up AF_XDP socket on thread.\n", seq_num);
         
         // Attempt to cleanup socket.
         cleanup_socket(ti->id);
@@ -120,12 +136,12 @@ void *thread_hdl(void *temp)
     {
         if (get_src_mac_address(ti->device, src_mac) != 0)
         {
-            fprintf(stdout, "[%d] WARNING - Failed to retrieve MAC address for %s.\n", ti->seq_cnt, ti->device);
+            fprintf(stdout, "[%d] WARNING - Failed to retrieve MAC address for %s.\n", seq_num, ti->device);
         }
 
         if (src_mac[0] == 0 && src_mac[1] == 0 && src_mac[2] == 0 && src_mac[3] == 0 && src_mac[4] == 0 && src_mac[5] == 0)
         {
-            fprintf(stdout, "[%d] WARNING - Source MAC address retrieved is 00:00:00:00:00:00.\n", ti->seq_cnt);
+            fprintf(stdout, "[%d] WARNING - Source MAC address retrieved is 00:00:00:00:00:00.\n", seq_num);
         }
     }
 
@@ -138,8 +154,8 @@ void *thread_hdl(void *temp)
 
     if (ti->cmd.verbose)
     {
-        printf("[%d] Source MAC address => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", ti->seq_cnt, src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
-        printf("[%d] Destination MAC address => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", ti->seq_cnt, dst_mac[0], dst_mac[1], dst_mac[2], dst_mac[3], dst_mac[4], dst_mac[5]);
+        printf("[%d] Source MAC address => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", seq_num, src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+        printf("[%d] Destination MAC address => %hhx:%hhx:%hhx:%hhx:%hhx:%hhx.\n", seq_num, dst_mac[0], dst_mac[1], dst_mac[2], dst_mac[3], dst_mac[4], dst_mac[5]);
     }
 
     // Create rand_r() seed.
@@ -267,9 +283,6 @@ void *thread_hdl(void *temp)
     // Initialize payload data.
     unsigned char *data = (unsigned char *)(buffer + sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len);
 
-    // Set ending time.
-    time_t end = time(NULL) + ti->seq.time;
-
     // Perform payload checks.
     for (int i = 0; i < ti->seq.pl_cnt; i++)
     {
@@ -291,7 +304,7 @@ void *thread_hdl(void *temp)
                 // Check if our file is invalid. If so, print error and set empty payload string.
                 if (fp == NULL)
                 {
-                    fprintf(stderr, "Unable to open payload file on payload #%d (%s) :: %s.\n", i + 1, pl->exact, strerror(errno));
+                    fprintf(stderr, "[%d][%d] Unable to open payload file on payload (%s) :: %s.\n", seq_num, i, pl->exact, strerror(errno));
 
                     pl_str = malloc(sizeof(char) * 2);
                     strcpy(pl_str, "");
@@ -386,22 +399,73 @@ void *thread_hdl(void *temp)
     // Create timespec for seed.
     struct timespec ts = {0};
 
+    // Handle timers
+    start_time[ti->seq_cnt] = time(NULL);
+
+    time_t to_end = time(NULL) + ti->seq.time;
+
+    last_updated[ti->seq_cnt] = time(NULL);
+
     // Loop.
     while (1)
     {
-        // Retrieve current time.
+        // Handle per-second rate limits.
+        // Note - We don't appear to need mutexes and locks? Not sure why -
+        // Since we're accessing global/shared variables between multiple threads.
+        if (ti->seq.pps > 0 || ti->seq.bps > 0)
+        {
+            // Retrieve current time in seconds and compare against last updated.
+            time_t new_time = time(NULL);
+
+            if (last_updated[ti->seq_cnt] != new_time)
+            {
+                // Set new time.
+                last_updated[ti->seq_cnt] = new_time;
+
+                // Reset per second counters to 0 if enabled.
+                if (ti->seq.pps > 0)
+                {
+                    __sync_lock_test_and_set(&cur_pps[ti->seq_cnt], 0);
+                }
+
+                if (ti->seq.bps > 0)
+                {
+                    __sync_lock_test_and_set(&cur_bps[ti->seq_cnt], 0);
+                }
+            }
+            else
+            {
+                // Check if we exceed rate limits if enabled.
+                // If we exceed, sleep for one micro-second to prevent pegging the CPU at 100%.
+                if (ti->seq.pps > 0 && cur_pps[ti->seq_cnt] >= ti->seq.pps)
+                {
+                    usleep(1);
+
+                    continue;
+                }
+
+                if (ti->seq.bps > 0 && cur_bps[ti->seq_cnt] >= ti->seq.bps)
+                {
+                    usleep(1);
+
+                    continue;
+                }
+            }
+        }
+
+        // Retrieve current time since boot.
         clock_gettime(CLOCK_BOOTTIME, &ts);
 
-        // Generate seed (we use nanoseconds).
+        // Generate seed (we use nanoseconds for better precision/randomness).
         seed = ts.tv_nsec;
 
-        // Check for random TTL.
+        // Check if we need to generate random IP TTL.
         if (ti->seq.ip.min_ttl != ti->seq.ip.max_ttl)
         {
             iph->ttl = rand_num(ti->seq.ip.min_ttl, ti->seq.ip.max_ttl, seed);
         }
 
-        // Check for random ID.
+        // Check if we need to generate random IP ID.
         if (ti->seq.ip.min_id != ti->seq.ip.max_id)
         {
             iph->id = htons(rand_num(ti->seq.ip.min_id, ti->seq.ip.max_id, seed));
@@ -417,13 +481,8 @@ void *thread_hdl(void *temp)
 
                 // Ensure this range is valid.
                 if (ti->seq.ip.ranges[ran] != NULL)
-                {
-                    if (ti->seq.max_count < 1 && !ti->seq.track_count)
-                    {
-                        count[ti->seq_cnt]++;
-                    }
-    
-                    char *randip = rand_ip(ti->seq.ip.ranges[ran], &count[ti->seq_cnt]);
+                {    
+                    char *randip = rand_ip(ti->seq.ip.ranges[ran], seed);
 
                     if (randip != NULL)
                     {
@@ -437,7 +496,7 @@ void *thread_hdl(void *temp)
                 else
                 {
                     fail:
-                    fprintf(stderr, "[%d] ERROR - Source range count is above 0, but string is NULL. Please report this! Using localhost...\n", ti->seq_cnt);
+                    fprintf(stderr, "[%d] ERROR - Source range count is above 0, but string is NULL. Please report this! Using localhost...\n", seq_num);
 
                     strcpy(s_ip, "127.0.0.1");
                 }
@@ -445,7 +504,7 @@ void *thread_hdl(void *temp)
             else
             {
                 // This shouldn't happen, but since it did, just assign localhost and warn the user.
-                fprintf(stdout, "[%d] WARNING - No source IP or source range(s) specified. Using localhost...\n", ti->seq_cnt);
+                fprintf(stdout, "[%d] WARNING - No source IP or source range(s) specified. Using localhost...\n", seq_num);
 
                 strcpy(s_ip, "127.0.0.1");
             }
@@ -460,13 +519,13 @@ void *thread_hdl(void *temp)
         // Check layer-4 protocols and assign random characteristics if need to be.
         if (protocol == IPPROTO_UDP)
         {
-            // Check for random source port.
+            // Check for random UDP source port.
             if (ti->seq.udp.src_port == 0)
             {
                 udph->source = htons(rand_num(1, 65535, seed));
             }
 
-            // Check for random destination port.
+            // Check for random UDP destination port.
             if (ti->seq.udp.dst_port == 0)
             {
                 udph->dest = htons(rand_num(1, 65535, seed));
@@ -474,11 +533,13 @@ void *thread_hdl(void *temp)
         }
         else if (protocol == IPPROTO_TCP)
         {
+            // Check for random TCP source port.
             if (ti->seq.tcp.src_port == 0)
             {
                 tcph->source = htons(rand_num(1, 65535, seed));
             }
 
+            // Check for random TCP destination port.
             if (ti->seq.tcp.dst_port == 0)
             {
                 tcph->dest = htons(rand_num(1, 65535, seed));
@@ -488,6 +549,7 @@ void *thread_hdl(void *temp)
         // Loop through each payload.
         for (int i = 0; i < ti->seq.pl_cnt; i++)
         {
+            // Retrieve payload at index.
             struct payload_opt *pl = &ti->seq.pls[i];
 
             // Check if we need to calculate random payload.
@@ -564,7 +626,7 @@ void *thread_hdl(void *temp)
 
             if ((ret = send_packet(ti->id, buffer, pckt_len[i], ti->cmd.verbose)) != 0)
             {
-                fprintf(stderr, "ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", ti->id, strerror(errno));
+                fprintf(stderr, "[%d][%d] ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", seq_num, i, ti->id, strerror(errno));
             }
 
             // Check if we want to send verbose output or not.
@@ -585,11 +647,30 @@ void *thread_hdl(void *temp)
                     dstport = ntohs(tcph->dest);
                 }
 
-                fprintf(stdout, "[%d][%d] Sent %d bytes of data from %s:%d to %s:%d.\n", ti->seq_cnt, i + 1, pckt_len[i], (ti->seq.ip.src_ip != NULL) ? ti->seq.ip.src_ip : s_ip, srcport, ti->seq.ip.dst_ip, dstport);
+                fprintf(stdout, "[%d][%d] Sent %d bytes of data from %s:%d to %s:%d.\n", seq_num, i + 1, pckt_len[i], (ti->seq.ip.src_ip != NULL) ? ti->seq.ip.src_ip : s_ip, srcport, ti->seq.ip.dst_ip, dstport);
             }
 
-            // Increment total bytes for sequence so far.
-            __sync_add_and_fetch(&total_data[ti->seq_cnt], pckt_len[i]);
+            // Increment total packets and bytes if needed.
+            if (ti->seq.max_pckts > 0 || ti->seq.track)
+            {
+                __sync_add_and_fetch(&total_pckts[ti->seq_cnt], 1);
+            }
+
+            if (ti->seq.max_bytes > 0 || ti->seq.track)
+            {
+                __sync_add_and_fetch(&total_bytes[ti->seq_cnt], pckt_len[i]);
+            }
+
+            // Increment per-second packets and bytes if needed.
+            if (ti->seq.pps > 0)
+            {
+                __sync_add_and_fetch(&cur_pps[ti->seq_cnt], 1);
+            }
+
+            if (ti->seq.bps > 0)
+            {
+                __sync_add_and_fetch(&cur_bps[ti->seq_cnt], pckt_len[i]);
+            }
 
             // Check for delay.
             if (ti->seq.delay > 0)
@@ -598,40 +679,33 @@ void *thread_hdl(void *temp)
             }
         }
 
-        // Check packet count.
-        if (ti->seq.max_count > 0 || ti->seq.track_count)
+        // Check total packet count.
+        if (ti->seq.max_pckts > 0 && total_pckts[ti->seq_cnt] >= ti->seq.max_pckts)
         {
-            // Increment current count.
-            __sync_add_and_fetch(&count[ti->seq_cnt], 1);
-
-            // Check if we should break.
-            if (ti->seq.max_count > 0 && count[ti->seq_cnt] >= ti->seq.max_count)
-            {
-                fprintf(stdout, "[%d] Packet count exceeded for sequence. Stopping...\n", ti->seq_cnt);
-
-                break;
-            }            
-        }
-
-        // Check time.
-        if (ti->seq.time > 0 && time(NULL) >= end)
-        {
-            fprintf(stdout, "[%d] Time exceeded for sequence. Stopping...\n", ti->seq_cnt);
+            fprintf(stdout, "[%d] Max packets exceeded for sequence. Stopping...\n", seq_num);
 
             break;
         }
 
-        // Check data.
-        if (ti->seq.max_data > 0)
+        // Check total bytes count.
+        if (ti->seq.max_bytes > 0 && total_bytes[ti->seq_cnt] >= ti->seq.max_bytes)
         {
-            if (total_data[ti->seq_cnt] >= ti->seq.max_data)
-            {
-                fprintf(stdout, "[%d] Max data exceeded for sequence. Stopping...\n", ti->seq_cnt);
+            fprintf(stdout, "[%d] Max bytes exceeded for sequence. Stopping...\n", seq_num);
 
-                break;
-            }
+            break;
+        }
+
+        // Check time.
+        if (ti->seq.time > 0 && time(NULL) >= to_end)
+        {
+            fprintf(stdout, "[%d] Time exceeded for sequence. Stopping...\n", seq_num);
+
+            break;
         }
     }
+
+    // Retrieve end time for this sequence.
+    end_time[ti->seq_cnt] = time(NULL);
 
     // Cleanup AF_XDP socket.
     cleanup_socket(ti->id);
@@ -676,17 +750,17 @@ void seq_send(const char *interface, struct sequence seq, __u16 seq_cnt2, struct
     ti.cmd = cmd;
 
     // Create the threads needed.
-    int threads = (seq.threads > 0) ? seq.threads : get_nprocs();
+    int t_cnt = (seq.threads > 0) ? seq.threads : get_nprocs();
 
-    // Reset count and total data for this sequence.
-    count[seq_cnt] = 0;
-    total_data[seq_cnt] = 0;
+    ti.seq_cnt = seq_cnt;
 
-    ti.seq_cnt = seq_cnt2;
+    // Increment sequence count.
+    seq_cnt++;
 
-    pthread_t p_id[MAX_THREADS];
+    // Store old thread count for later use.
+    int old_thread_cnt = thread_cnt;
 
-    for (int i = 0; i < threads; i++)
+    for (int i = 0; i < t_cnt; i++)
     {
         ti.id = i;
 
@@ -694,17 +768,69 @@ void seq_send(const char *interface, struct sequence seq, __u16 seq_cnt2, struct
         struct thread_info *ti_dup = malloc(sizeof(struct thread_info));
         memcpy(ti_dup, &ti, sizeof(struct thread_info));
 
-        pthread_create(&p_id[i], NULL, thread_hdl, (void *)ti_dup);
+        pthread_create(&threads[thread_cnt], NULL, thread_hdl, (void *)ti_dup);
+
+        thread_cnt++;
     }
 
-    // Check for block or if this is the last sequence (we'd want to join threads so the main thread exits after completion).
-    if (seq.block || (seq_cnt) >= (seq_cnt2 - 1))
+    // Check if we need to join/block this threads.
+     if (seq.block || (seq_cnt) >= (seq_cnt2 - 1))
     {
-        for (int i = 0; i < threads; i++)
+        for (int i = 0; i < t_cnt; i++)
         {
-            pthread_join(p_id[i], NULL);
+            pthread_join(threads[old_thread_cnt + i], NULL);
+        }
+    }
+}
+
+/**
+ * Shuts down threads, prints stats for each sequence (if tracking is enabled), and exits program.
+ * 
+ * @return Void
+*/
+void shutdown_prog(struct config *cfg)
+{
+    for (int i = 0; i < thread_cnt; i++)
+    {
+        pthread_cancel(threads[i]);
+    }
+
+    fprintf(stdout, "Completed %d sequences!\n", seq_cnt);
+
+    // Check if we need to print tracked stats.
+    for (int i = 0; i < seq_cnt; i++)
+    {
+        struct sequence *seq = &cfg->seq[i];
+
+        if (seq->track)
+        {
+            // Check if we need to set end time to now.
+            if (end_time[i] < 1)
+            {
+                end_time[i] = time(NULL);
+            }
+
+            time_t total_secs = end_time[i] - start_time[i];
+
+            // Make sure we're not dividing by 0!
+            if (total_secs < 1)
+            {
+                total_secs = 1;
+            }
+
+            // Calculate average per-second stats.
+            __u64 pps = total_pckts[i] > 0 ? total_pckts[i] / total_secs : 0;
+            __u64 bps = total_bytes[i] > 0 ? total_bytes[i] / total_secs : 0;
+
+            fprintf(stdout, "[%d] Completed sequence with a total of %llu packets and %llu bytes. Average PPS => %llu. Average BPS => %llu. Total seconds => %ld.\n", i + 1, total_pckts[i], total_bytes[i], pps, bps, total_secs);
         }
     }
 
-    seq_cnt++;
+    // Free config pointer. Probably isn't needed since we're exiting the program next, but good practice.
+    if (cfg != NULL)
+    {
+        free(cfg);
+    }
+
+    exit(EXIT_SUCCESS);
 }

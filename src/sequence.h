@@ -22,3 +22,4 @@ struct thread_info
 };
 
 void seq_send(const char *interface, struct sequence seq, __u16 seqc, struct cmd_line cmd);
+void shutdown_prog(struct config *cfg);
