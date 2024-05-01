@@ -53,7 +53,7 @@ MAIN_OUT := pcktbatch
 
 # Global and main flags.
 GLOBAL_FLAGS := -O2 -g
-MAIN_FLAGS := -pthread -lyaml -lelf -lz
+MAIN_FLAGS := -pthread -lelf -lz
 
 # Chains.
 all: mk_build af_xdp sequence cmd_line main
