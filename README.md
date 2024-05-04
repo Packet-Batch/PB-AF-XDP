@@ -21,6 +21,8 @@ These are just a couple of basic tests I performed between two virtual machines 
 
 ![Test Two](./images/test2.gif)
 
+**NOTE** - Since the above demos, there was a change in Packet Batch that allows for more precise/randomized IPs/ports via seeding [here](https://github.com/Packet-Batch/PB-AF-XDP/commit/e1c872ccd10aa94120d10d120259706f31518678) (using the seed, nanoseconds since boot, instead of the UNIX timestamp which is shown above). Therefore, Packet Batch will now send from a more randomized IP/port than what is shown above!
+
 ## AF_XDP
 This is a special version of Packet Batch that utilizes `AF_XDP` [sockets](https://docs.kernel.org/networking/af_xdp.html) instead of `AF_PACKETv3` (which is what the standard version uses). I recommend using this version over the standard version due to performance improvements, but you must keep in mind the following.
 
