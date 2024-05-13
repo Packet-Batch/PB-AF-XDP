@@ -8,7 +8,6 @@
 #define MAX_CPUS 256
 #define NUM_FRAMES 4096
 #define FRAME_SIZE XSK_UMEM__DEFAULT_FRAME_SIZE
-#define RX_BATCH_SIZE 64
 #define INVALID_UMEM_FRAME UINT64_MAX
 //#define DEBUG
 
@@ -43,13 +42,11 @@ struct xsk_socket_info
     __u32 outstanding_tx;
 };
 
-
-int send_packet(int thread_id, void *pckt, __u16 length, __u8 verbose);
-__u64 get_umem_addr(int thread_id, int idx);
-void *get_umem_loc(int thread_id, __u64 addr);
-void set_static_data();
-int is_shared_umem();
+int send_packet(struct xsk_socket_info *xsk, int thread_id, void *pckt, __u16 length, __u8 verbose);
+__u64 get_umem_addr(struct xsk_socket_info *xsk, int idx);
+void *get_umem_loc(struct xsk_socket_info *xsk, __u64 addr);
 void setup_af_xdp_variables(struct cmd_line_af_xdp *cmd_af_xdp, int verbose);
-int setup_umem(int index);
-int setup_socket(const char *dev, __u16 thread_id, int verbose);
-void cleanup_socket(__u16 id);
+struct xsk_umem_info *setup_umem(int index);
+struct xsk_socket_info *setup_socket(const char *dev, __u16 thread_id, int verbose);
+void cleanup_socket(struct xsk_socket_info *xsk);
+int get_socket_fd(struct xsk_socket_info *xsk);

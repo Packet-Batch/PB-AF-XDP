@@ -114,14 +114,16 @@ void *thread_hdl(void *temp)
     int sock_fd;
 
     // Create AF_XDP socket and check.
-    sock_fd = setup_socket(ti->device, ti->id, ti->cmd.verbose);
+    struct xsk_socket_info *xsk = setup_socket(ti->device, ti->id, ti->cmd.verbose);
+
+    sock_fd = get_socket_fd(xsk);
 
     if (sock_fd < 0)
     {
         fprintf(stderr, "[%d] Error setting up AF_XDP socket on thread.\n", seq_num);
         
         // Attempt to cleanup socket.
-        cleanup_socket(ti->id);
+        cleanup_socket(xsk);
 
         // Attempt to close the socket.
         close(sock_fd);
@@ -624,7 +626,7 @@ void *thread_hdl(void *temp)
             // Send packet out.
             int ret;
 
-            if ((ret = send_packet(ti->id, buffer, pckt_len[i], ti->cmd.verbose)) != 0)
+            if ((ret = send_packet(xsk, ti->id, buffer, pckt_len[i], ti->cmd.verbose)) != 0)
             {
                 fprintf(stderr, "[%d][%d] ERROR - Could not send packet on AF_XDP socket (%d) :: %s.\n", seq_num, i, ti->id, strerror(errno));
             }
@@ -708,7 +710,7 @@ void *thread_hdl(void *temp)
     end_time[ti->seq_cnt] = time(NULL);
 
     // Cleanup AF_XDP socket.
-    cleanup_socket(ti->id);
+    cleanup_socket(xsk);
 
     // Attempt to close the socket.
     close(sock_fd);

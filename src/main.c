@@ -117,17 +117,6 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
-    // Before continuing, if we're in shared UMEM mode, create the first and only UMEM before going to each thread to avoid concurrency issues.
-    if (cmd_af_xdp.shared_umem)
-    {
-        if (setup_umem(0) != 0)
-        {
-            fprintf(stderr, "Error creating shared UMEM :: %s (%d).\n", strerror(-errno), errno);
-
-            return EXIT_FAILURE;
-        }
-    }
-
     // Setup signals to exit the program.
     signal(SIGINT, sign_hdl);
     signal(SIGTERM, sign_hdl);
