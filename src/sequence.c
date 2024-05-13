@@ -259,7 +259,7 @@ void *thread_hdl(void *temp)
     // Perform payload checks.
     for (int i = 0; i < ti->seq.pl_cnt; i++)
     {
-        struct payload_opt *pl = &ti->seq.pls[i];
+        payload_opt_t *pl = &ti->seq.pls[i];
         u8 *pl_buff = payloads[i];
 
         if (pl->exact != NULL)
@@ -361,7 +361,7 @@ void *thread_hdl(void *temp)
     {
         ti->seq.pl_cnt = 1;
 
-        struct payload_opt *pl = &ti->seq.pls[0];
+        payload_opt_t *pl = &ti->seq.pls[0];
         pl->is_static = 1;
 
         // Calculate lengths.
@@ -523,7 +523,7 @@ void *thread_hdl(void *temp)
         for (int i = 0; i < ti->seq.pl_cnt; i++)
         {
             // Retrieve payload at index.
-            struct payload_opt *pl = &ti->seq.pls[i];
+            payload_opt_t *pl = &ti->seq.pls[i];
 
             // Check if we need to calculate random payload.
             if (pl->is_static)
@@ -702,7 +702,7 @@ void *thread_hdl(void *temp)
  * 
  * @return Void
 **/
-void seq_send(const char *interface, struct sequence seq, u16 seq_cnt2, struct cmd_line cmd)
+void seq_send(const char *interface, sequence_t seq, u16 seq_cnt2, cmd_line_t cmd)
 {
     // First, let's check if the destination IP is set.
     if (seq.ip.dst_ip == NULL)
@@ -717,7 +717,7 @@ void seq_send(const char *interface, struct sequence seq, u16 seq_cnt2, struct c
 
     // Assign correct values to thread info.
     strcpy((char *)&ti.device, interface);
-    memcpy(&ti.seq, &seq, sizeof(struct sequence));
+    memcpy(&ti.seq, &seq, sizeof(sequence_t));
 
     // Copy command line.
     ti.cmd = cmd;
@@ -761,7 +761,7 @@ void seq_send(const char *interface, struct sequence seq, u16 seq_cnt2, struct c
  * 
  * @return Void
 */
-void shutdown_prog(struct config *cfg)
+void shutdown_prog(config_t *cfg)
 {
     for (int i = 0; i < thread_cnt; i++)
     {
@@ -773,7 +773,7 @@ void shutdown_prog(struct config *cfg)
     // Check if we need to print tracked stats.
     for (int i = 0; i < seq_cnt; i++)
     {
-        struct sequence *seq = &cfg->seq[i];
+        sequence_t *seq = &cfg->seq[i];
 
         if (seq->track)
         {

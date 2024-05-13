@@ -1,6 +1,6 @@
 #include "main.h"
 
-struct config *cfg = NULL;
+config_t *cfg = NULL;
 
 /**
  * Signal handler to shut down the program.
@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
 {
     // Create command line structure.
     opterr = 0;
-    struct cmd_line cmd = {0};
+    cmd_line_t cmd = {0};
 
     // Parse command line and store values into cmd.
     parse_cmd_line(argc, argv, &cmd);
@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     }
 
     // Create AF_XDP-specific command line variable and set defaults.
-    struct cmd_line_af_xdp cmd_af_xdp = {0};
+    cmd_line_af_xdp_t cmd_af_xdp = {0};
     cmd_af_xdp.batch_size = 1;
 
     // Parse AF_XDP-specific command line.
@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
     }
 
     // Create config structure.
-    cfg = malloc(sizeof(struct config));
+    cfg = malloc(sizeof(config_t));
     memset(cfg, 0, sizeof(*cfg));
 
     int seq_cnt = 0;
