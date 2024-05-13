@@ -69,7 +69,7 @@ libbpf:
 # Build and install the Packet Batch common submodule (this includes libyaml).
 common:
 	$(MAKE) -C $(COMMON_DIR)/
-	
+
 common_install:
 	$(MAKE) -C $(COMMON_DIR)/ install
 

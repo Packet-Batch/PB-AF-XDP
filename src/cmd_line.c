@@ -1,7 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <getopt.h>
-
 #include "cmd_line.h"
 
 static const struct option long_opts[] =
@@ -25,7 +21,7 @@ static const struct option long_opts[] =
  * 
  * @return Void
 **/
-void parse_cmd_line_af_xdp(struct cmd_line_af_xdp *cmd_af_xdp, int argc, char **argv)
+void parse_cmd_line_af_xdp(cmd_line_af_xdp_t *cmd_af_xdp, int argc, char **argv)
 {
     int c = -1;
 

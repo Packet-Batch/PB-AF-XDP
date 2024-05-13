@@ -1,19 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <linux/types.h>
-#include <getopt.h>
-#include <errno.h>
-#include <signal.h>
-
-#include <utils.h>
-#include <cmd_line.h>
-#include <config.h>
-
-#include "sequence.h"
-#include "cmd_line.h"
-#include "af_xdp.h"
 #include "main.h"
 
 struct config *cfg = NULL;
@@ -90,7 +74,7 @@ int main(int argc, char *argv[])
     }
 
     // Attempt to parse config.
-    __u8 log = 1;
+    u8 log = 1;
 
     if (cmd.cli)
     {

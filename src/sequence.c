@@ -1,33 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/sysinfo.h>
-#include <netinet/in.h>
-#include <net/if.h>
-#include <linux/if.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
-#include <linux/icmp.h>
-#include <linux/if_packet.h>
-#include <arpa/inet.h>
-#include <sys/ioctl.h>
-#include <inttypes.h>
-#include <time.h>
-#include <pthread.h>
-#include <string.h>
-#include <errno.h>
-#include <linux/if_link.h>
-
-#include <utils.h>
-#include <cmd_line.h>
-#include <config.h>
-
 #include "sequence.h"
-#include "af_xdp.h"
 
 #include <csum.h>
 
@@ -35,18 +6,18 @@ pthread_t threads[MAX_THREADS];
 int thread_cnt = 0;
 
 // Total counters.
-__u64 total_bytes[MAX_SEQUENCES] = {0};
-__u64 total_pckts[MAX_SEQUENCES] = {0};
+u64 total_bytes[MAX_SEQUENCES] = {0};
+u64 total_pckts[MAX_SEQUENCES] = {0};
 
 // Per second counters and variables.
 time_t last_updated[MAX_SEQUENCES] = {0};
-__u64 cur_pps[MAX_SEQUENCES] = {0};
-__u64 cur_bps[MAX_SEQUENCES] = {0};
+u64 cur_pps[MAX_SEQUENCES] = {0};
+u64 cur_bps[MAX_SEQUENCES] = {0};
 
 time_t start_time[MAX_SEQUENCES] = {0};
 time_t end_time[MAX_SEQUENCES] = {0};
 
-__u16 seq_cnt;
+u16 seq_cnt;
 
 /**
  * The thread handler for sending/receiving.
@@ -58,27 +29,27 @@ __u16 seq_cnt;
 void *thread_hdl(void *temp)
 {
     // Cast data as thread info.
-    struct thread_info *ti = (struct thread_info *)temp;
+    thread_info_t *ti = (thread_info_t *)temp;
 
     // Get human-friendly sequence ID (id + 1).
     int seq_num = ti->seq_cnt + 1;
 
     // Let's parse some config values before creating the socket so we know what we're doing.
-    __u8 protocol = IPPROTO_UDP;
-    __u8 src_mac[ETH_ALEN] = {0};
-    __u8 dst_mac[ETH_ALEN] = {0};
-    __u16 data_len[MAX_PAYLOADS] = {0};
-    __u16 pckt_len[MAX_PAYLOADS] = {0};
+    u8 protocol = IPPROTO_UDP;
+    u8 src_mac[ETH_ALEN] = {0};
+    u8 dst_mac[ETH_ALEN] = {0};
+    u16 data_len[MAX_PAYLOADS] = {0};
+    u16 pckt_len[MAX_PAYLOADS] = {0};
 
     // Payloads.
-    __u8 **payloads;
-    payloads = malloc(MAX_PAYLOADS * sizeof(__u8 *));
+    u8 **payloads;
+    payloads = malloc(MAX_PAYLOADS * sizeof(u8 *));
     
     if (payloads != NULL)
     {
         for (int i = 0; i < MAX_PAYLOADS; i++)
         {
-            payloads[i] = malloc(MAX_PCKT_LEN * sizeof(__u8));
+            payloads[i] = malloc(MAX_PCKT_LEN * sizeof(u8));
         }
     }
     else
@@ -114,7 +85,7 @@ void *thread_hdl(void *temp)
     int sock_fd;
 
     // Create AF_XDP socket and check.
-    struct xsk_socket_info *xsk = setup_socket(ti->device, ti->id, ti->cmd.verbose);
+    xsk_socket_info_t *xsk = setup_socket(ti->device, ti->id, ti->cmd.verbose);
 
     sock_fd = get_socket_fd(xsk);
 
@@ -151,7 +122,7 @@ void *thread_hdl(void *temp)
     if (dst_mac[0] == 0 && dst_mac[1] == 0 && dst_mac[2] == 0 && dst_mac[3] == 0 && dst_mac[4] == 0 && dst_mac[5] == 0)
     {
         // Retrieve the default gateway's MAC address and store it in dst_mac.
-        get_gw_mac((__u8 *) &dst_mac);
+        get_gw_mac((u8 *) &dst_mac);
     }
 
     if (ti->cmd.verbose)
@@ -167,7 +138,7 @@ void *thread_hdl(void *temp)
     char buffer[MAX_PCKT_LEN];
 
     // Common packet characteristics.
-    __u8 l4_len;
+    u8 l4_len;
 
     // Source IP string for a random-generated IP address.
     char s_ip[32];
@@ -289,7 +260,7 @@ void *thread_hdl(void *temp)
     for (int i = 0; i < ti->seq.pl_cnt; i++)
     {
         struct payload_opt *pl = &ti->seq.pls[i];
-        __u8 *pl_buff = payloads[i];
+        u8 *pl_buff = payloads[i];
 
         if (pl->exact != NULL)
         {
@@ -301,7 +272,7 @@ void *thread_hdl(void *temp)
             if (pl->is_file)
             {
                 FILE *fp = fopen(pl->exact, "rb");
-                __u64 len = 0;
+                u64 len = 0;
 
                 // Check if our file is invalid. If so, print error and set empty payload string.
                 if (fp == NULL)
@@ -371,7 +342,7 @@ void *thread_hdl(void *temp)
                 pckt_len[i] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len + data_len[i];
 
                 // Fill out payload with random characters.
-                for (__u16 i = 0; i < data_len[i]; i++)
+                for (u16 i = 0; i < data_len[i]; i++)
                 {
                     *(pl_buff + i) = rand_r(&seed);
                 }
@@ -479,7 +450,7 @@ void *thread_hdl(void *temp)
             // Check if there are ranges.
             if (ti->seq.ip.range_count > 0)
             {
-                __u16 ran = rand_num(0, (ti->seq.ip.range_count - 1), seed);
+                u16 ran = rand_num(0, (ti->seq.ip.range_count - 1), seed);
 
                 // Ensure this range is valid.
                 if (ti->seq.ip.ranges[ran] != NULL)
@@ -571,7 +542,7 @@ void *thread_hdl(void *temp)
                     pckt_len[i] = sizeof(struct ethhdr) + (iph->ihl * 4) + l4_len + data_len[i];
 
                     // Fill out payload with random characters.
-                    for (__u16 i = 0; i < data_len[i]; i++)
+                    for (u16 i = 0; i < data_len[i]; i++)
                     {
                         *(data + i) = rand_r(&seed);
                     }
@@ -609,7 +580,7 @@ void *thread_hdl(void *temp)
                     if (ti->seq.l4_csum)
                     {
                         icmph->checksum = 0;
-                        icmph->checksum = icmp_csum((__u16 *)icmph, l4_len + data_len[i]);
+                        icmph->checksum = icmp_csum((u16 *)icmph, l4_len + data_len[i]);
                     }
 
                     break;
@@ -635,8 +606,8 @@ void *thread_hdl(void *temp)
             if (ti->cmd.verbose && ret == 0)
             {
                 // Retrieve source and destination ports for UDP/TCP protocols.
-                __u16 srcport = 0;
-                __u16 dstport = 0;
+                u16 srcport = 0;
+                u16 dstport = 0;
 
                 if (protocol == IPPROTO_UDP)
                 {
@@ -731,7 +702,7 @@ void *thread_hdl(void *temp)
  * 
  * @return Void
 **/
-void seq_send(const char *interface, struct sequence seq, __u16 seq_cnt2, struct cmd_line cmd)
+void seq_send(const char *interface, struct sequence seq, u16 seq_cnt2, struct cmd_line cmd)
 {
     // First, let's check if the destination IP is set.
     if (seq.ip.dst_ip == NULL)
@@ -742,7 +713,7 @@ void seq_send(const char *interface, struct sequence seq, __u16 seq_cnt2, struct
     }
 
     // Create new thread_info structure to pass to threads.
-    struct thread_info ti = {0};
+    thread_info_t ti = {0};
 
     // Assign correct values to thread info.
     strcpy((char *)&ti.device, interface);
@@ -767,8 +738,8 @@ void seq_send(const char *interface, struct sequence seq, __u16 seq_cnt2, struct
         ti.id = i;
 
         // Create a duplicate of thread info structure to send to each thread.
-        struct thread_info *ti_dup = malloc(sizeof(struct thread_info));
-        memcpy(ti_dup, &ti, sizeof(struct thread_info));
+        thread_info_t *ti_dup = malloc(sizeof(thread_info_t));
+        memcpy(ti_dup, &ti, sizeof(thread_info_t));
 
         pthread_create(&threads[thread_cnt], NULL, thread_hdl, (void *)ti_dup);
 
@@ -821,8 +792,8 @@ void shutdown_prog(struct config *cfg)
             }
 
             // Calculate average per-second stats.
-            __u64 pps = total_pckts[i] > 0 ? total_pckts[i] / total_secs : 0;
-            __u64 bps = total_bytes[i] > 0 ? total_bytes[i] / total_secs : 0;
+            u64 pps = total_pckts[i] > 0 ? total_pckts[i] / total_secs : 0;
+            u64 bps = total_bytes[i] > 0 ? total_bytes[i] / total_secs : 0;
 
             fprintf(stdout, "[%d] Completed sequence with a total of %llu packets and %llu bytes. Average PPS => %llu. Average BPS => %llu. Total seconds => %ld.\n", i + 1, total_pckts[i], total_bytes[i], pps, bps, total_secs);
         }
