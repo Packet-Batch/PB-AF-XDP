@@ -432,6 +432,12 @@ void *thread_hdl(void *temp)
         // Generate seed (we use nanoseconds for better precision/randomness).
         seed = ts.tv_nsec;
 
+        // Add some more randomness if track is enabled.
+        if (ti->seq.track)
+        {
+            seed ^= total_pckts[ti->seq_cnt];
+        }
+
         // Check if we need to generate random IP TTL.
         if (ti->seq.ip.min_ttl != ti->seq.ip.max_ttl)
         {
