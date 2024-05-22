@@ -12,7 +12,7 @@
 * Optional layer 3 and 4 checksum calculation in the event you want the NIC's hardware to calculate checksums for generated outgoing packets.
 
 #### Note Regarding Seeding/Randomness
-When generating randomness in a packet (e.g. random source IPs, ports, payload(s), etc.), by default, we try to use nanoseconds since boot using `timespec` as the seed when passing to `[rand_r()]`(https://linux.die.net/man/3/rand_r) for example. However, I've found this isn't completely random, especially since the seed variable (`unsigned int`) and `timespec` nanoseconds variable (`long`) do not match in size.
+When generating randomness in a packet (e.g. random source IPs, ports, payload(s), etc.), by default, we try to use nanoseconds since boot using `timespec` as the seed when passing to [`rand_r()`](https://linux.die.net/man/3/rand_r) for example. However, I've found this isn't completely random, especially since the seed variable (`unsigned int`) and `timespec` nanoseconds variable (`long`) do not match in size.
 
 Therefore, I added the constant [`VERY_RANDOM`](https://github.com/Packet-Batch/PB-AF-XDP/blob/master/src/sequence.h#L36) that can be uncommented. When this constant is defined, the [`getrandom()`](https://man7.org/linux/man-pages/man2/getrandom.2.html) function is used to fill the seed with random bytes. This results in more randomness, but the `getrandom()` function adds a bit more overhead than retrieving the nanoseconds since system boot from my testing.
 
