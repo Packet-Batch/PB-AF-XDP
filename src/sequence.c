@@ -2,6 +2,10 @@
 
 #include <csum.h>
 
+#ifdef VERY_RANDOM
+#include <sys/random.h>
+#endif
+
 pthread_t threads[MAX_THREADS];
 int thread_cnt = 0;
 
@@ -429,15 +433,12 @@ void *thread_hdl(void *temp)
         // Retrieve current time since boot.
         clock_gettime(CLOCK_BOOTTIME, &ts);
 
-        // Generate seed (we use nanoseconds for better precision/randomness).
-        seed = ts.tv_nsec;
-
-        // Add some more randomness if track is enabled.
-        if (ti->seq.track)
-        {
-            seed ^= total_pckts[ti->seq_cnt];
-        }
-
+        // Generate seed.
+#ifdef VERY_RANDOM
+        getrandom(&seed, sizeof(seed), 0);
+#else
+        seed = ts.tv_nsec; 
+#endif
         // Check if we need to generate random IP TTL.
         if (ti->seq.ip.min_ttl != ti->seq.ip.max_ttl)
         {
