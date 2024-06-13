@@ -711,10 +711,18 @@ void *thread_hdl(void *temp)
 **/
 void seq_send(const char *interface, sequence_t seq, u16 seq_cnt2, cmd_line_t cmd)
 {
-    // First, let's check if the destination IP is set.
+    // First, make sure interface isn't NULL.
+    if (interface == NULL)
+    {
+        fprintf(stderr, "Interface not set on sequence #%d. Not moving forward with this sequence.\n", seq_cnt2);
+
+        return;
+    }
+    
+    // Let's check if the destination IP is set.
     if (seq.ip.dst_ip == NULL)
     {
-        fprintf(stdout, "Destination IP not set on sequence #%u. Not moving forward with this sequence.\n", seq_cnt2);
+        fprintf(stderr, "Destination IP not set on sequence #%d. Not moving forward with this sequence.\n", seq_cnt2);
 
         return;
     }
